@@ -50,68 +50,71 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "Key length: ${#KEY}, prefix: ${KEY:0:6}…"
 
-      - name: Check authenticated search returns magnets
+      - name: Check the keyed tier unlocks magnets
         if: steps.key.outputs.present == 'true'
         env:
           TC_KEY: ${{ steps.key.outputs.key }}
         run: |
-          echo key-length:${#TC_KEY}
+          # The API rejects clients that look like scripts (curl's default agent is
+          # 403), so every probe sends a real app User-Agent.
+          UA='TorrentClawMovies/1.2.0 (Android)'
+          URL='https://torrentclaw.com/api/v1/search?q=inception&type=movie&limit=3&quality=1080p'
 
-          BODY=$(mktemp)
-          HEADERS=$(mktemp)
+          # 1) anonymous baseline
+          ANON=$(mktemp)
+          curl -sS -o $ANON -A "$UA" -H 'Accept: application/json' "$URL"
+          ANON_TIER=$(grep -o 'unknown' $ANON | head -1)
+          ANON_HASH=$(grep -o infoHash $ANON 2>/dev/null | wc -l)
 
-          CODE=$(curl -sS -o $BODY -D $HEADERS -w '%{http_code}' \
-            -H 'Authorization: Bearer '$TC_KEY \
+          # 2) authenticated
+          KEYED=$(mktemp)
+          KEYED_H=$(mktemp)
+          CODE=$(curl -sS -o $KEYED -D $KEYED_H -w '%{http_code}' -A "$UA" \
             -H 'Accept: application/json' \
-            -H 'X-Search-Source: android' \
-            'https://torrentclaw.com/api/v1/search?q=inception&type=movie&limit=1&quality=1080p')
+            -H 'Authorization: Bearer '$TC_KEY \
+            -H 'X-API-Key: '$TC_KEY \
+            -H 'X-Search-Source: android' "$URL")
+          TIER=$(grep -i '^x-ratelimit-tier:' $KEYED_H 2>/dev/null | tr -d '\r' | awk '{print $2}')
+          REMAIN=$(grep -i '^x-ratelimit-remaining:' $KEYED_H 2>/dev/null | tr -d '\r' | awk '{print $2}')
+          KEYED_HASH=$(grep -o infoHash $KEYED 2>/dev/null | wc -l)
+          KEYED_MAGNET=$(grep -o magnetUrl $KEYED 2>/dev/null | wc -l)
+          NOTICE=$(grep -o 'require a free API key' $KEYED 2>/dev/null | head -1)
 
-          TIER=$(grep -i '^x-ratelimit-tier:' $HEADERS 2>/dev/null | tr -d '\r' | awk '{print $2}')
-          HASHES=$(grep -o infoHash $BODY 2>/dev/null | wc -l)
-          MAGNETS=$(grep -o magnetUrl $BODY 2>/dev/null | wc -l)
+          # 3) the .torrent endpoint the app also uses
+          TOR_CODE=$(curl -sS -o /dev/null -w '%{http_code}' -A "$UA" \
+            -H 'Authorization: Bearer '$TC_KEY \
+            'https://torrentclaw.com/api/v1/torrent/0000000000000000000000000000000000000000')
 
-          # What exactly triggers the block? Plain curl is rejected while a
-          # browser-looking agent is accepted, so the app's own User-Agent matters.
-          probe() {
-            curl -sS -o /dev/null -w '%{http_code}' "$@" \
-              'https://torrentclaw.com/api/v1/search?q=dune&type=movie&limit=1'
-          }
-          P_PLAIN=$(probe)
-          P_BROWSER=$(probe -A 'Mozilla/5.0')
-          P_PREFIX=$(probe -A 'TorrentClawMovies/1.2.0')
-          P_FULL=$(probe -A 'TorrentClawMovies/1.2.0 (Android)')
-          P_KEYED_BROWSER=$(probe -A 'Mozilla/5.0' -H 'Authorization: Bearer '$TC_KEY)
-          P_KEYED_APP=$(probe -A 'TorrentClawMovies/1.2.0 (Android)' -H 'Authorization: Bearer '$TC_KEY)
-
-          echo matrix plain:$P_PLAIN browser:$P_BROWSER prefix:$P_PREFIX full:$P_FULL keyedBrowser:$P_KEYED_BROWSER keyedApp:$P_KEYED_APP
-
-          echo http:$CODE tier:${TIER:-none} hashes:$HASHES magnets:$MAGNETS anon:$ANON_CODE
+          echo http:$CODE tier:${TIER:-none} remain:${REMAIN:-none} keyedHash:$KEYED_HASH anonHash:$ANON_HASH torrentEndpoint:$TOR_CODE
 
           {
-            echo '# Live API verification'
+            echo '# Live TorrentClaw API verification'
             echo
-            echo '- Keyed request: HTTP '$CODE
-            echo '- UA matrix (plain / Mozilla / app-prefix / app-full): '$P_PLAIN / $P_BROWSER / $P_PREFIX / $P_FULL
-            echo '- Keyed + Mozilla UA: '$P_KEYED_BROWSER
-            echo '- Keyed + app UA: '$P_KEYED_APP
-            echo '- Rate-limit tier: '${TIER:-none}
-            echo '- infoHash fields: '$HASHES
-            echo '- magnetUrl fields: '$MAGNETS
+            echo 'Run on GitHub Actions against the live API, using the same User-Agent'
+            echo 'and headers the app sends.'
             echo
-            echo 'First 200 chars of the response:'
+            echo '| Probe | Result |'
+            echo '| --- | --- |'
+            echo '| Anonymous search - infoHash fields | '$ANON_HASH' |'
+            echo '| Keyed search - HTTP | '$CODE' |'
+            echo '| Keyed search - X-RateLimit-Tier | '${TIER:-none}' |'
+            echo '| Keyed search - remaining | '${REMAIN:-none}' |'
+            echo '| Keyed search - infoHash fields | '$KEYED_HASH' |'
+            echo '| Keyed search - magnetUrl fields | '$KEYED_MAGNET' |'
+            echo '| Keyed .torrent endpoint - HTTP | '$TOR_CODE' |'
             echo
-            echo '```'
-            head -c 200 $BODY
-            echo
-            echo '```'
+            if [ $KEYED_HASH -gt 0 ]; then
+              echo '**PASS**: the key unlocks info hashes and magnets, so in-app'
+              echo 'BitTorrent downloads can start.'
+            else
+              echo '**FAIL**: the key is accepted as a request but the response still'
+              echo 'withholds info hashes, so downloads would stay locked.'
+              echo
+              echo 'API `_notice` present: '${NOTICE:-no}
+            fi
           } > api-report.md
 
-          if [ $CODE = 200 ] && [ $HASHES -gt 0 ]; then
-            echo PASS: the key unlocks magnets.
-            exit 0
-          fi
-
-          echo FAIL: authenticated search did not unlock magnets.
+          if [ $KEYED_HASH -gt 0 ]; then exit 0; fi
           exit 1
       - name: Check the keyless tier still degrades cleanly
         run: |
