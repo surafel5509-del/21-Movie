@@ -41,6 +41,8 @@ data class PopularItemDto(
 
 @Serializable
 data class SearchResponseDto(
+    /** Present when the API withheld magnets (anonymous tier). */
+    @SerialName("_notice") val notice: String? = null,
     val total: Int = 0,
     val page: Int = 1,
     @SerialName("pageSize") val pageSize: Int = 0,
@@ -71,6 +73,8 @@ data class SearchResultDto(
     @SerialName("bestQuality") val bestQuality: String? = null,
     @SerialName("hasHdr") val hasHdr: Boolean? = null,
     @SerialName("topInfoHash") val topInfoHash: String? = null,
+    @SerialName("originCountry") val originCountry: List<String> = emptyList(),
+    val rating: String? = null,
     val torrents: List<TorrentDto> = emptyList(),
 ) {
     companion object {
@@ -106,6 +110,9 @@ data class TorrentDto(
     @SerialName("isProper") val isProper: Boolean? = null,
     @SerialName("isRepack") val isRepack: Boolean? = null,
     @SerialName("isRemastered") val isRemastered: Boolean? = null,
+    @SerialName("audioChannels") val audioChannels: Int? = null,
+    @SerialName("scanStatus") val scanStatus: String? = null,
+    @SerialName("threatLevel") val threatLevel: String? = null,
     val season: Int? = null,
     val episode: Int? = null,
 )

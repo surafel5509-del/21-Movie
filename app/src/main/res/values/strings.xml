@@ -137,6 +137,21 @@
     <string name="count_leechers">%1$s leechers</string>
     <string name="count_releases_short">%1$d</string>
 
+    <!-- Torrent engine / foreground service -->
+    <string name="torrent_notification_channel">Movie downloads</string>
+    <string name="torrent_notification_channel_desc">Shows progress while a movie is downloading.</string>
+    <string name="torrent_notification_title_single">Downloading movie</string>
+    <string name="torrent_notification_title_many">Downloading %1$d movies</string>
+    <string name="torrent_notification_waiting">Looking for peers…</string>
+    <string name="torrent_notification_speed">%1$s · %2$s</string>
+    <string name="torrent_notification_stop">Stop</string>
+    <string name="torrent_notification_done_title">Download complete</string>
+    <string name="torrent_notification_done_body">Saved to Movies</string>
+    <plurals name="torrent_notification_done_text">
+        <item quantity="one">%1$d movie finished downloading</item>
+        <item quantity="other">%1$d movies finished downloading</item>
+    </plurals>
+
     <!-- Downloads -->
     <string name="nav_downloads">Downloads</string>
     <string name="downloads_title">Downloads</string>
@@ -147,6 +162,7 @@
     <string name="downloads_empty_title">No downloads yet</string>
     <string name="downloads_empty_body">Open a movie and tap Download .torrent to fetch the file here.</string>
     <string name="downloads_clear_finished">Clear finished</string>
+    <string name="download_kind_movie">BitTorrent</string>
     <string name="download_kind_torrent">.torrent file</string>
     <string name="download_kind_media">Media file</string>
     <string name="download_pause">Pause download</string>
@@ -159,6 +175,26 @@
     <string name="download_queued">Queued · see Downloads tab</string>
     <string name="download_no_client_file">No torrent app could open this file. Install qBittorrent or Flud.</string>
     <string name="detail_download_heading">Download</string>
+    <string name="release_download_movie">Download %1$s</string>
+    <string name="release_download_movie_unknown">Download movie</string>
+    <string name="release_needs_api_key">Add a free API key to download this release</string>
+    <string name="release_fetching_metadata">Fetching metadata…</string>
+    <string name="release_looking_for_peers">Looking for peers…</string>
+    <string name="download_started">Download started — see the Downloads tab</string>
+    <string name="detail_no_releases_api_hint">TorrentClaw found releases for this movie but withheld their hashes because no API key is configured. Add a free key in Settings → TorrentClaw API key to download.</string>
+
+    <!-- API key -->
+    <string name="settings_api_section">TorrentClaw account</string>
+    <string name="settings_api_title">API key</string>
+    <string name="settings_api_from_build">Configured in this build</string>
+    <string name="settings_api_add">Add</string>
+    <string name="settings_api_change">Change</string>
+    <string name="settings_api_why">Without a key TorrentClaw hides info hashes and magnet links, so movies can\'t be downloaded. A free key unlocks 120 requests/min and real downloads.</string>
+    <string name="settings_api_field_label">Paste your key</string>
+    <string name="settings_api_save">Save key</string>
+    <string name="settings_api_clear">Remove</string>
+    <string name="settings_api_get_key">Get a free key at torrentclaw.com</string>
+    <string name="action_close">Close</string>
 
     <!-- Misc -->
     <string name="loading">Loading</string>

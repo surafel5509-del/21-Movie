@@ -2,9 +2,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Networking: metadata, posters/backdrops, magnet payloads -->
+    <!-- Networking: metadata, posters/backdrops, swarming -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Real BitTorrent downloads keep running in the background -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Wakes the CPU only while a torrent is actively transferring -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!--
       Android 11 (API 30) package visibility: without these <queries> entries the
@@ -25,6 +32,10 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="application/x-bittorrent" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="video/*" />
+        </intent>
     </queries>
 
     <application
@@ -42,6 +53,13 @@
         tools:targetApi="34">
 
         <!-- Shares finished .torrent files with the user's torrent client. -->
+        <!-- Owns the libtorrent session so a download survives backgrounding. -->
+        <service
+            android:name=".data.torrent.TorrentService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

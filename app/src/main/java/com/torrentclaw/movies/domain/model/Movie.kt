@@ -38,9 +38,17 @@ data class Movie(
         get() = year?.toString() ?: "—"
 }
 
-/** A single torrent release for a movie. [magnetUri] is never blank once mapped. */
+/**
+ * A single torrent release for a movie.
+ *
+ * [infoHash] is nullable on purpose: TorrentClaw's anonymous tier strips info
+ * hashes, magnet URIs and `.torrent` URLs from the payload. Those rows are still
+ * real, ranked releases, so the UI lists them — it just cannot download them
+ * until the user adds a free API key. Dropping them (the previous behaviour)
+ * made every movie look like "no releases".
+ */
 data class TorrentRelease(
-    val infoHash: String,
+    val infoHash: String?,
     val title: String?,
     val quality: String?,
     val codec: String?,
@@ -48,7 +56,7 @@ data class TorrentRelease(
     val sizeBytes: Long?,
     val seeders: Int,
     val leechers: Int,
-    val magnetUri: String,
+    val magnetUri: String?,
     val torrentUrl: String?,
     val tracker: String?,
     val qualityScore: Int?,
@@ -91,8 +99,59 @@ data class TorrentRelease(
             else -> SwarmHealth.DEAD
         }
 
+    /**
+     * Stable identity for this release. The info hash when TorrentClaw exposes
+     * one (authenticated), otherwise the release title — which is unique enough
+     * within a single movie's release list.
+     */
+    val key: String
+        get() = infoHash?.uppercase() ?: "title:" + title.orEmpty().hashCode().toUInt().toString(16)
+
+    /** Raw `.torrent` bytes, populated by the repository when it prefetches one. */
+    var torrentBytes: ByteArray? = null
+        private set
+
+    /** Attaches the downloaded `.torrent` payload so the engine can skip metadata. */
+    fun withTorrentBytes(bytes: ByteArray?): TorrentRelease = apply { torrentBytes = bytes }
+
+    /** True once the release can be opened, copied or downloaded. */
+    val isDownloadable: Boolean
+        get() = !infoHash.isNullOrBlank() || !magnetUri.isNullOrBlank() || !torrentUrl.isNullOrBlank()
+
+    /** Magnet link, built from the hash when the API withheld one. */
+    val playableMagnet: String?
+        get() = magnetUri?.takeIf { it.startsWith("magnet:?", ignoreCase = true) }
+            ?: infoHash?.takeIf { it.isNotBlank() }?.let { buildMagnet(it, title) }
+
     val shortInfoHash: String
-        get() = if (infoHash.length > 10) "${infoHash.take(6)}…${infoHash.takeLast(4)}" else infoHash
+        get() {
+            val hash = infoHash.orEmpty()
+            return if (hash.length > 10) "${hash.take(6)}…${hash.takeLast(4)}" else hash
+        }
+
+    companion object {
+        /** Public trackers appended when we have to build a magnet ourselves. */
+        val DEFAULT_TRACKERS: List<String> = listOf(
+            "udp://tracker.opentrackr.org:1337/announce",
+            "udp://open.demonii.com:1337/announce",
+            "udp://tracker.torrent.eu.org:451/announce",
+            "udp://exodus.desync.com:6969/announce",
+            "udp://tracker.moeking.me:6969/announce",
+            "udp://tracker.torrentclaw.com:1337/announce",
+        )
+
+        fun buildMagnet(infoHash: String, displayName: String?): String {
+            val hash = infoHash.trim().lowercase()
+            val name = displayName?.trim().orEmpty().ifBlank { hash }
+            return buildString {
+                append("magnet:?xt=urn:btih:").append(hash)
+                append("&dn=").append(java.net.URLEncoder.encode(name, "UTF-8").replace("+", "%20"))
+                DEFAULT_TRACKERS.forEach {
+                    append("&tr=").append(java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20"))
+                }
+            }
+        }
+    }
 }
 
 enum class SwarmHealth { STRONG, FAIR, WEAK, DEAD }

@@ -213,16 +213,23 @@ fun DetailScreen(
                     uiState = uiState,
                     onOpenMagnet = viewModel::onOpenMagnet,
                     onCopyMagnet = { release ->
-                        MagnetLauncher.copyToClipboard(
-                            context = context,
-                            label = "movie.magnet",
-                            text = release.magnetUri,
-                        )
-                        haptics.confirm()
-                        viewModel.onCopied(release)
+                        val magnet = release.playableMagnet
+                        if (magnet != null) {
+                            MagnetLauncher.copyToClipboard(
+                                context = context,
+                                label = "movie.magnet",
+                                text = magnet,
+                            )
+                            haptics.confirm()
+                            viewModel.onCopied(release)
+                        } else {
+                            viewModel.notifyMissingMagnet()
+                        }
                     },
                     onSortSelected = viewModel::setReleaseSort,
                     onDownloadTorrent = viewModel::onDownloadTorrent,
+                    onDownloadMovie = viewModel::onDownloadMovie,
+                    onCancelMovie = viewModel::onCancelMovieDownload,
                 )
             }
         }
@@ -236,6 +243,8 @@ private fun DetailContent(
     onCopyMagnet: (TorrentRelease) -> Unit,
     onSortSelected: (SortOption) -> Unit,
     onDownloadTorrent: (TorrentRelease) -> Unit,
+    onDownloadMovie: (TorrentRelease) -> Unit,
+    onCancelMovie: (TorrentRelease) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val movie = uiState.movie ?: return
@@ -370,11 +379,24 @@ private fun DetailContent(
                 }
             }
 
-            items(uiState.releases, key = { release -> release.infoHash }) { release ->
+            // Stable keys: several anonymous releases share a null hash, which
+            // would crash LazyColumn ("key was already used").
+            items(uiState.releases, key = { release -> release.key }) { release ->
+                val liveProgress = release.infoHash
+                    ?.uppercase()
+                    ?.let { uiState.torrentProgress[it] }
                 ReleaseCard(
                     release = release,
-                    isBest = release.infoHash == uiState.bestRelease?.infoHash,
+                    isBest = release.key == uiState.bestRelease?.key,
                     highlightedQuality = null,
+                    downloadProgress = liveProgress?.takeIf { it.hasMetadata || it.progress > 0f },
+                    onDownload = {
+                        if (liveProgress == null) {
+                            onDownloadMovie(release)
+                        } else {
+                            onCancelMovie(release)
+                        }
+                    },
                     onOpenMagnet = { onOpenMagnet(release) },
                     onCopyMagnet = { onCopyMagnet(release) },
                     onDownloadTorrent = { onDownloadTorrent(release) },
@@ -383,7 +405,10 @@ private fun DetailContent(
             }
         } else {
             item {
-                NoReleasesCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                NoReleasesCard(
+                    needsApiKey = uiState.needsApiKey,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
             }
         }
 

@@ -86,17 +86,21 @@ fun RecentItemDto.toMovie(): Movie = Movie(
 )
 
 /**
- * Maps a release, rebuilding the magnet when the payload has none.
- * Returns null for unusable entries (no infoHash and no magnet).
+ * Maps a release, rebuilding the magnet when the payload has one but no hash.
+ *
+ * Important: this never returns null. TorrentClaw's anonymous tier sends real
+ * releases with `infoHash`, `magnetUrl` and `torrentUrl` omitted, and the old
+ * behaviour of dropping those rows is what made every movie render
+ * "No torrents indexed yet". Metadata is preserved so the release still shows
+ * up, sorted and ranked, with download actions disabled until a key is added.
  */
-fun TorrentDto.toRelease(magnetResolver: MagnetResolver, movieTitle: String): TorrentRelease? {
+fun TorrentDto.toRelease(magnetResolver: MagnetResolver, movieTitle: String): TorrentRelease {
+    val hash = infoHash.trim().ifBlank { null }
     val magnet = magnetResolver.resolve(
         magnetUrl = magnetUrl,
         infoHash = infoHash,
         displayName = rawTitle ?: movieTitle,
-    ) ?: return null
-    val hash = infoHash.ifBlank { extractInfoHash(magnet).orEmpty() }
-    if (hash.isBlank()) return null
+    )
 
     return TorrentRelease(
         infoHash = hash,
@@ -107,8 +111,11 @@ fun TorrentDto.toRelease(magnetResolver: MagnetResolver, movieTitle: String): To
         sizeBytes = sizeBytes.toSizeBytes(),
         seeders = seeders.coerceAtLeast(0),
         leechers = leechers.coerceAtLeast(0),
-        magnetUri = magnet,
-        torrentUrl = torrentUrl,
+        magnetUri = magnet.takeIf { it.startsWith("magnet:?", ignoreCase = true) },
+        // The API may expose either an absolute URL or only the hash, in which
+        // case the documented /api/v1/torrent/{infoHash} route is used.
+        torrentUrl = torrentUrl?.trim()?.takeIf { it.isNotBlank() }
+            ?: hash?.let { "https://torrentclaw.com/api/v1/torrent/$it" },
         tracker = source?.trim()?.takeIf { it.isNotBlank() },
         qualityScore = qualityScore,
         uploadedAt = uploadedAt,
@@ -124,8 +131,8 @@ fun TorrentDto.toRelease(magnetResolver: MagnetResolver, movieTitle: String): To
 /** Detail payload = movie metadata + de-duplicated releases sorted by swarm health. */
 fun SearchResultDto.toMovieDetail(magnetResolver: MagnetResolver): MovieDetail {
     val releases = torrents
-        .mapNotNull { it.toRelease(magnetResolver, movieTitle = title) }
-        .distinctBy { it.infoHash.lowercase() }
+        .map { it.toRelease(magnetResolver, movieTitle = title) }
+        .distinctBy { it.infoHash?.lowercase() ?: it.title.orEmpty().lowercase() }
         .sortedByDescending { it.seeders }
     return MovieDetail(movie = toMovie(), releases = releases)
 }

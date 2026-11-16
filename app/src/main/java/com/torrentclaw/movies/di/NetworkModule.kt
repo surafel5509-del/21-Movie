@@ -2,7 +2,9 @@ package com.torrentclaw.movies.di
 
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import com.torrentclaw.movies.BuildConfig
+import com.torrentclaw.movies.network.ApiKeyProvider
 import com.torrentclaw.movies.network.AuthInterceptor
+import com.torrentclaw.movies.network.BuildTimeApiKey
 import com.torrentclaw.movies.network.TorrentClawApi
 import dagger.Module
 import dagger.Provides
@@ -35,10 +37,17 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideAuthInterceptor(): AuthInterceptor = AuthInterceptor(
-        apiKey = BuildConfig.TORRENTCLAW_API_KEY,
-        userAgent = USER_AGENT,
-    )
+    fun provideAuthInterceptor(apiKeyProvider: ApiKeyProvider): AuthInterceptor =
+        AuthInterceptor(apiKeyProvider = apiKeyProvider, userAgent = USER_AGENT)
+
+    /**
+     * The key compiled into the APK, empty in public builds. Bound separately
+     * from any other [String] so injection stays unambiguous.
+     */
+    @Provides
+    @Singleton
+    @BuildTimeApiKey
+    fun provideBuildTimeApiKey(): String = BuildConfig.TORRENTCLAW_API_KEY
 
     @Provides
     @Singleton

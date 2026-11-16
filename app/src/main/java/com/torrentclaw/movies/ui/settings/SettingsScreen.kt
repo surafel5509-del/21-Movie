@@ -48,6 +48,30 @@ import com.torrentclaw.movies.domain.model.QualityFilter
 import com.torrentclaw.movies.domain.model.SortOption
 import com.torrentclaw.movies.domain.model.ThemeMode
 import com.torrentclaw.movies.ui.theme.CardShapes
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.KeyOff
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material3.Button
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -189,6 +213,15 @@ fun SettingsScreen(
                 }
             }
 
+            item { SectionLabel(stringResource(R.string.settings_api_section)) }
+            item {
+                ApiKeyCard(
+                    state = uiState,
+                    onSave = viewModel::saveApiKey,
+                    onConsumeMessage = viewModel::consumeApiKeyMessage,
+                )
+            }
+
             item { SectionLabel(stringResource(R.string.settings_about)) }
             item {
                 SettingsGroup {
@@ -317,5 +350,186 @@ private fun SwitchRow(
             )
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+/**
+ * API key entry. TorrentClaw's anonymous tier strips info hashes and magnet URIs
+ * from every response, which is why downloads need a (free) key. This card makes
+ * that requirement actionable instead of hiding it in the README.
+ */
+@Composable
+private fun ApiKeyCard(
+    state: SettingsUiState,
+    onSave: (String) -> Unit,
+    onConsumeMessage: () -> Unit,
+) {
+    var draft by rememberSaveable { mutableStateOf("") }
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var revealed by rememberSaveable { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
+
+    LaunchedEffect(state.apiKeyMessage) {
+        val msg = state.apiKeyMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(msg)
+        onConsumeMessage()
+    }
+
+    Box {
+        Column {
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                border = BorderStroke(
+                    1.dp,
+                    if (state.apiKeyConfigured) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                    } else {
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                    },
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (state.apiKeyConfigured) {
+                                Icons.Rounded.Key
+                            } else {
+                                Icons.Rounded.KeyOff
+                            },
+                            contentDescription = null,
+                            tint = if (state.apiKeyConfigured) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.settings_api_title),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = when {
+                                    state.apiKeyFromBuild ->
+                                        stringResource(R.string.settings_api_from_build)
+                                    state.apiKeyConfigured -> state.apiKeyMasked
+                                    else -> stringResource(R.string.settings_api_anonymous)
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        TextButton(onClick = { expanded = !expanded }) {
+                            Text(
+                                if (expanded) {
+                                    stringResource(R.string.action_close)
+                                } else {
+                                    stringResource(
+                                        if (state.apiKeyConfigured) {
+                                            R.string.settings_api_change
+                                        } else {
+                                            R.string.settings_api_add
+                                        },
+                                    )
+                                },
+                            )
+                        }
+                    }
+
+                    if (!state.apiKeyConfigured) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.settings_api_why),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
+                    if (expanded) {
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = draft,
+                            onValueChange = { draft = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(stringResource(R.string.settings_api_field_label)) },
+                            placeholder = { Text("tc_live_…") },
+                            singleLine = true,
+                            visualTransformation = if (revealed) {
+                                VisualTransformation.None
+                            } else {
+                                PasswordVisualTransformation()
+                            },
+                            trailingIcon = {
+                                IconButton(onClick = { revealed = !revealed }) {
+                                    Icon(
+                                        imageVector = if (revealed) {
+                                            Icons.Rounded.VisibilityOff
+                                        } else {
+                                            Icons.Rounded.Visibility
+                                        },
+                                        contentDescription = null,
+                                    )
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Password,
+                                imeAction = ImeAction.Done,
+                            ),
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    onSave(draft)
+                                    draft = ""
+                                    expanded = false
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Text(stringResource(R.string.settings_api_save))
+                            }
+                            if (state.apiKeyConfigured && !state.apiKeyFromBuild) {
+                                OutlinedButton(
+                                    onClick = {
+                                        onSave("")
+                                        draft = ""
+                                        expanded = false
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                ) {
+                                    Text(stringResource(R.string.settings_api_clear))
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        TextButton(
+                            onClick = {
+                                runCatching { uriHandler.openUri("https://torrentclaw.com/register") }
+                                    .onFailure {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Couldn't open the browser.")
+                                        }
+                                    }
+                            },
+                        ) {
+                            Text(stringResource(R.string.settings_api_get_key))
+                        }
+                    }
+                }
+            }
+        }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
     }
 }

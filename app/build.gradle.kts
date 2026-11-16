@@ -59,6 +59,12 @@ android {
     }
 
     defaultConfig {
+        // libtorrent4j ships one AAR per ABI; keep only real-device architectures
+        // so the APK does not carry unused native code.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+
         applicationId = "com.torrentclaw.movies"
         minSdk = 26
         targetSdk = 35
@@ -112,6 +118,10 @@ android {
     }
 
     packaging {
+        // libtorrent4j's native libs must be extracted so System.loadLibrary works.
+        jniLibs {
+            useLegacyPackaging = true
+        }
         resources {
             excludes += setOf(
                 "/META-INF/{AL2.0,LGPL2.1}",
@@ -130,6 +140,12 @@ ksp {
 }
 
 dependencies {
+    // Real in-process BitTorrent engine (libtorrent 2.1 + per-ABI native libs).
+    implementation(libs.libtorrent4j)
+    implementation(libs.libtorrent4j.android.arm64)
+    implementation(libs.libtorrent4j.android.arm)
+    implementation(libs.libtorrent4j.android.x86_64)
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.lifecycle.runtime.ktx)

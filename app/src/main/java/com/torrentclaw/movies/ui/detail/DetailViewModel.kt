@@ -4,6 +4,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.torrentclaw.movies.data.download.DownloadManager
+import com.torrentclaw.movies.data.torrent.TorrentEngine
+import com.torrentclaw.movies.data.torrent.TorrentProgress
 import com.torrentclaw.movies.data.repository.MovieRepository
 import com.torrentclaw.movies.data.repository.WatchlistRepository
 import com.torrentclaw.movies.domain.model.Movie
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.net.URLDecoder
@@ -34,6 +37,10 @@ data class DetailUiState(
     val isBookmarked: Boolean = false,
     val errorMessage: String? = null,
     val isRefreshing: Boolean = false,
+    /** Live engine state keyed by upper-case info hash. */
+    val torrentProgress: Map<String, TorrentProgress> = emptyMap(),
+    /** True when the API is withholding hashes because no key is configured. */
+    val needsApiKey: Boolean = false,
 ) {
     val movie: Movie?
         get() = detail?.movie
@@ -69,7 +76,11 @@ class DetailViewModel @Inject constructor(
     private val movieRepository: MovieRepository,
     private val watchlistRepository: WatchlistRepository,
     private val downloadManager: DownloadManager,
+    private val torrentEngine: TorrentEngine,
+    apiKeyProvider: com.torrentclaw.movies.network.ApiKeyProvider,
 ) : ViewModel() {
+
+    private val needsApiKey = !apiKeyProvider.isConfigured
 
     private val movieId: Int = runCatching {
         when (val raw = savedStateHandle.get<Any?>(Destination.ARG_MOVIE_ID)) {
@@ -101,6 +112,14 @@ class DetailViewModel @Inject constructor(
                 .collect { saved -> _uiState.update { it.copy(isBookmarked = saved) } }
         }
         load(showSpinner = true)
+
+        // Mirror engine progress into the detail state so a release card can show
+        // its own live percentage without a separate screen.
+        viewModelScope.launch {
+            torrentEngine.progress.collect { snapshot ->
+                _uiState.update { it.copy(torrentProgress = snapshot) }
+            }
+        }
     }
 
     fun load(showSpinner: Boolean = false) {
@@ -124,6 +143,7 @@ class DetailViewModel @Inject constructor(
                             releases = releases,
                             title = result.data.movie.title.ifBlank { title },
                             errorMessage = null,
+                            needsApiKey = needsApiKey && result.data.releases.any { !it.isDownloadable },
                         )
                     }
                 }
@@ -161,11 +181,23 @@ class DetailViewModel @Inject constructor(
     }
 
     fun onOpenMagnet(release: TorrentRelease) {
-        effects.value = DetailEffect.OpenMagnet(release.magnetUri)
+        val magnet = release.playableMagnet
+        if (magnet == null) {
+            notifyMissingMagnet()
+            return
+        }
+        effects.value = DetailEffect.OpenMagnet(magnet)
         viewModelScope.launch {
             // Analytics ping; deliberately fire-and-forget so the UI never waits.
             movieRepository.trackMagnet(release.infoHash, "magnet")
         }
+    }
+
+    /** Anonymous tier: the release exists but carries no hash or magnet yet. */
+    fun notifyMissingMagnet() {
+        effects.value = DetailEffect.ShowSnackbar(
+            "This release has no magnet link yet. Add a free TorrentClaw API key in Settings.",
+        )
     }
 
     fun onOpenMagnetHandled(success: Boolean) {
@@ -175,6 +207,41 @@ class DetailViewModel @Inject constructor(
 
     fun onMagnetOpened() {
         effects.value = null
+    }
+
+    /**
+     * Starts a real BitTorrent download of the movie for [release].
+     *
+     * The engine swarms it, the foreground service keeps it alive in the
+     * background, and progress is persisted to Room for the Downloads tab.
+     */
+    fun onDownloadMovie(release: TorrentRelease) {
+        val movie = _uiState.value.movie ?: return
+        viewModelScope.launch {
+            runCatching { downloadManager.enqueueTorrentDownload(movie, release) }
+                .onSuccess { id ->
+                    effects.value = if (id != null) {
+                        DetailEffect.TorrentQueued
+                    } else {
+                        DetailEffect.ShowSnackbar("This release has no info hash yet. Add an API key.")
+                    }
+                }
+                .onFailure {
+                    effects.value = DetailEffect.ShowSnackbar(
+                        it.message ?: "Couldn't start the download.",
+                    )
+                }
+        }
+    }
+
+    /** Stops a running movie download started from this screen. */
+    fun onCancelMovieDownload(release: TorrentRelease) {
+        viewModelScope.launch {
+            val hash = release.infoHash?.uppercase() ?: return@launch
+            downloadManager.downloads.first().firstOrNull { it.id == "movie:$hash" }?.let { entity ->
+                downloadManager.removeTorrent(entity, deleteFiles = true)
+            }
+        }
     }
 
     /**

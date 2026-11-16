@@ -58,6 +58,9 @@ data class DownloadEntity(
             status == DownloadStatus.PAUSED.name
 
     companion object {
+        /** Stable id for a real BitTorrent movie download. */
+        fun movieTorrentId(infoHash: String): String = "movie:$infoHash"
+
         /** Stable id for a torrent file download. */
         fun torrentId(infoHash: String): String = "torrent:$infoHash"
 
@@ -84,7 +87,11 @@ enum class DownloadStatus {
 }
 
 enum class DownloadKind {
+    /** Real BitTorrent movie download through the libtorrent engine. */
+    TORRENT,
+    /** The small `.torrent` file itself, handed to an external client. */
     TORRENT_FILE,
+    /** A direct HTTP(S) resource streamed by [com.torrentclaw.movies.data.download.FileDownloader]. */
     MEDIA,
     ;
 

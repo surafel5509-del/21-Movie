@@ -79,13 +79,26 @@ class DownloadsViewModel @Inject constructor(
         }
     }
 
-    fun pause(id: String) = downloadManager.pause(id)
+    /** Routes a pause to the torrent engine or the HTTP downloader as appropriate. */
+    fun pause(entity: DownloadEntity) = when (entity.kind) {
+        DownloadKind.TORRENT.name -> downloadManager.pauseTorrent(entity)
+        else -> downloadManager.pause(entity.id)
+    }
 
-    fun resume(id: String) = downloadManager.resume(id)
+    fun resume(entity: DownloadEntity) = when (entity.kind) {
+        DownloadKind.TORRENT.name -> downloadManager.resumeTorrent(entity)
+        else -> downloadManager.resume(entity.id)
+    }
 
-    fun retry(id: String) = downloadManager.retry(id)
+    fun retry(entity: DownloadEntity) = when (entity.kind) {
+        DownloadKind.TORRENT.name -> downloadManager.resumeTorrent(entity)
+        else -> downloadManager.retry(entity.id)
+    }
 
-    fun remove(id: String) = downloadManager.cancelAndDelete(id)
+    fun remove(entity: DownloadEntity) = when (entity.kind) {
+        DownloadKind.TORRENT.name -> downloadManager.removeTorrent(entity, deleteFiles = true)
+        else -> downloadManager.cancelAndDelete(entity.id)
+    }
 
     fun clearFinished() = viewModelScope.launch { downloadManager.clearFinished() }
 

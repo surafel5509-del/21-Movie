@@ -4,12 +4,15 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import androidx.core.content.FileProvider
 import com.torrentclaw.movies.BuildConfig
 import com.torrentclaw.movies.data.local.DownloadDao
 import com.torrentclaw.movies.data.local.DownloadEntity
 import com.torrentclaw.movies.data.local.DownloadKind
 import com.torrentclaw.movies.data.local.DownloadStatus
+import com.torrentclaw.movies.data.torrent.TorrentEngine
+import com.torrentclaw.movies.data.torrent.TorrentService
 import com.torrentclaw.movies.domain.model.Movie
 import com.torrentclaw.movies.domain.model.TorrentRelease
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -62,10 +65,12 @@ class DownloadManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dao: DownloadDao,
     private val fileDownloader: FileDownloader,
+    private val torrentEngine: TorrentEngine,
 ) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val jobs = mutableMapOf<String, Job>()
+    private val engineWatchers = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val throttle = Semaphore(MAX_CONCURRENT)
 
     private val _notices = MutableStateFlow<DownloadNotice?>(null)
@@ -89,11 +94,222 @@ class DownloadManager @Inject constructor(
         .flowOn(Dispatchers.IO)
 
     /** Called once from the application/UI entry point to resume interrupted work. */
+    /**
+     * Restarts work interrupted by process death: HTTP transfers from their
+     * persisted byte offset, BitTorrent jobs by re-adding the magnet (libtorrent
+     * re-checks the files already on disk and resumes from the verified pieces).
+     */
     fun resumePending() {
         scope.launch {
-            dao.getPending().forEach { entity ->
-                if (entity.status == DownloadStatus.QUEUED.name) start(entity.id)
+            val pending = dao.getPending()
+            pending.filter { it.kind == DownloadKind.TORRENT.name || it.kind == DownloadKind.MEDIA.name }
+                .forEach { entity ->
+                    // MEDIA/TORRENT jobs were interrupted mid-transfer; resume them.
+                    if (entity.kind == DownloadKind.MEDIA.name) start(entity.id)
+                }
+            pending.filter { it.kind == DownloadKind.TORRENT.name && it.infoHash != null }
+                .forEach { entity ->
+                    // BitTorrent: rejoin the swarm with the persisted magnet.
+                    val magnet = entity.magnetUri ?: return@forEach
+                    resumeTorrent(
+                        entity.copy(
+                            magnetUri = magnet,
+                            status = DownloadStatus.ACTIVE.name,
+                        ),
+                    )
+                }
+        }
+    }
+
+    // ─────────────────────── real movie downloads ────────────────────────
+
+    /**
+     * Starts a real BitTorrent download for [release].
+     *
+     * The row is persisted first so the queue survives process death, then the
+     * engine is asked to join the swarm and the foreground service is started so
+     * the transfer continues when the app is backgrounded. Progress flows back
+     * from [TorrentEngine.progress] into Room, which is what the UI renders.
+     *
+     * Returns the row id, or null when the release carries no info hash (which
+     * is what the anonymous tier sends back).
+     */
+    suspend fun enqueueTorrentDownload(
+        movie: Movie,
+        release: TorrentRelease,
+    ): String? = withContext(Dispatchers.IO) {
+        val infoHash = release.infoHash?.takeIf { it.isNotBlank() } ?: return@withContext null
+        val magnet = release.playableMagnet ?: return@withContext null
+        val id = DownloadEntity.movieTorrentId(infoHash)
+
+        val existing = dao.findById(id)
+        if (existing != null && existing.status == DownloadStatus.COMPLETED.name) {
+            return@withContext id
+        }
+
+        val now = System.currentTimeMillis()
+        val entity = DownloadEntity(
+            id = id,
+            kind = DownloadKind.TORRENT.name,
+            movieId = movie.id,
+            movieTitle = movie.title,
+            posterUrl = movie.posterUrl,
+            quality = release.qualityLabel,
+            source = release.tracker,
+            fileName = release.title ?: movie.title,
+            url = magnet,
+            magnetUri = magnet,
+            infoHash = infoHash.uppercase(),
+            totalBytes = release.sizeBytes ?: 0L,
+            downloadedBytes = existing?.downloadedBytes ?: 0L,
+            status = DownloadStatus.ACTIVE.name,
+            localPath = downloadsDir().absolutePath,
+            errorMessage = null,
+            createdAt = existing?.createdAt ?: now,
+            updatedAt = now,
+        )
+        dao.upsert(entity)
+        startTorrentSession()
+        torrentEngine.addTorrent(release, downloadsDir())
+        observeTorrentEngine(id, infoHash.uppercase())
+        id
+    }
+
+    /** Movies land in the app-specific external dir; no storage permission needed. */
+    private fun downloadsDir(): File =
+        File(context.getExternalFilesDir(null) ?: context.filesDir, "Movies").apply { mkdirs() }
+
+    /** Starts the foreground service, which starts and owns the engine session. */
+    private fun startTorrentSession() {
+        runCatching { TorrentService.start(context) }
+            .onFailure { Log.w(TAG, "could not start the torrent service", it) }
+    }
+
+    /**
+     * Bridges engine progress into Room for one download. Only the active rows
+     * are updated, and only when a value actually changed, so the database write
+     * rate stays at ~1 Hz instead of 60.
+     */
+    private fun observeTorrentEngine(id: String, infoHash: String) {
+        if (engineWatchers.add(id)) {
+            scope.launch {
+                torrentEngine.progress.collect { snapshot ->
+                    val progress = snapshot[infoHash] ?: return@collect
+                    val current = dao.findById(id) ?: return@collect
+                    val status = when {
+                        progress.isFinished -> DownloadStatus.COMPLETED.name
+                        else -> DownloadStatus.ACTIVE.name
+                    }
+                    if (current.downloadedBytes == progress.downloadedBytes &&
+                        current.status == status
+                    ) {
+                        return@collect
+                    }
+                    dao.updateProgress(
+                        id = id,
+                        downloaded = progress.downloadedBytes,
+                        total = progress.totalBytes.takeIf { it > 0 } ?: current.totalBytes,
+                        status = status,
+                        bps = progress.downloadRate,
+                        eta = progress.etaSeconds,
+                        now = System.currentTimeMillis(),
+                    )
+                    if (progress.isFinished && current.status != DownloadStatus.COMPLETED.name) {
+                        _notices.value = DownloadNotice.Completed(
+                            id = id,
+                            title = current.movieTitle,
+                            path = current.localPath,
+                        )
+                    }
+                }
             }
+            scope.launch {
+                torrentEngine.errors.collect { errors ->
+                    val reason = errors[infoHash] ?: return@collect
+                    dao.updateStatus(
+                        id = id,
+                        status = DownloadStatus.FAILED.name,
+                        error = reason,
+                        localPath = null,
+                        now = System.currentTimeMillis(),
+                    )
+                    _notices.value = DownloadNotice.Failed(
+                        id = id,
+                        title = dao.findById(id)?.movieTitle ?: "Download",
+                        reason = reason,
+                    )
+                }
+            }
+        }
+    }
+
+    /** Pause/resume/remove a real torrent job (called from the UI). */
+    fun pauseTorrent(entity: DownloadEntity) {
+        scope.launch {
+            entity.infoHash?.let { torrentEngine.pause(it.uppercase()) }
+            dao.updateStatus(entity.id, DownloadStatus.PAUSED.name, null, entity.localPath, System.currentTimeMillis())
+        }
+    }
+
+    /**
+     * Resumes a torrent job. If libtorrent no longer knows the hash (fresh
+     * process, or it was paused and removed), the magnet is re-added so the
+     * swarm is rejoined and existing pieces are re-checked rather than re-fetched.
+     */
+    fun resumeTorrent(entity: DownloadEntity) {
+        scope.launch {
+            val infoHash = entity.infoHash?.uppercase() ?: return@launch
+            dao.updateStatus(
+                entity.id,
+                DownloadStatus.ACTIVE.name,
+                null,
+                entity.localPath ?: downloadsDir().absolutePath,
+                System.currentTimeMillis(),
+            )
+            startTorrentSession()
+            if (torrentEngine.progress.value.containsKey(infoHash)) {
+                torrentEngine.resume(infoHash)
+            } else {
+                val magnet = entity.magnetUri ?: return@launch
+                val release = TorrentRelease(
+                    infoHash = infoHash,
+                    title = entity.fileName,
+                    quality = entity.quality,
+                    codec = null,
+                    source = entity.source,
+                    sizeBytes = entity.totalBytes.takeIf { it > 0 },
+                    seeders = 0,
+                    leechers = 0,
+                    magnetUri = magnet,
+                    torrentUrl = null,
+                    tracker = entity.source,
+                    qualityScore = null,
+                    uploadedAt = null,
+                    releaseGroup = null,
+                    hdrType = null,
+                    audioCodec = null,
+                    languages = emptyList(),
+                    isProper = false,
+                    isRepack = false,
+                )
+                torrentEngine.addTorrent(release, downloadsDir())
+                observeTorrentEngine(entity.id, infoHash)
+            }
+        }
+    }
+
+    fun removeTorrent(entity: DownloadEntity, deleteFiles: Boolean = false) {
+        scope.launch {
+            entity.infoHash?.let { hash ->
+                torrentEngine.remove(hash.uppercase())
+                if (deleteFiles) {
+                    entity.fileName.takeIf { it.isNotBlank() }?.let { name ->
+                        runCatching { File(downloadsDir(), name).deleteRecursively() }
+                    }
+                }
+            }
+            dao.deleteById(entity.id)
+            engineWatchers.remove(entity.id)
         }
     }
 
@@ -106,8 +322,11 @@ class DownloadManager @Inject constructor(
     suspend fun enqueueTorrentFile(
         movie: Movie,
         release: TorrentRelease,
-    ): String = withContext(Dispatchers.IO) {
-        val id = DownloadEntity.torrentId(release.infoHash)
+    ): String? = withContext(Dispatchers.IO) {
+        // No hash (anonymous tier) means no URL to fetch and nothing to hand to
+        // a client; the UI disables the button in that case.
+        val infoHash = release.infoHash?.takeIf { it.isNotBlank() } ?: return@withContext null
+        val id = DownloadEntity.torrentId(infoHash)
         val existing = dao.findById(id)
         if (existing != null && existing.status == DownloadStatus.COMPLETED.name) return@withContext id
 
@@ -125,7 +344,7 @@ class DownloadManager @Inject constructor(
             url = release.torrentUrl?.toAbsoluteUrl()
                 ?: "${BuildConfig.TORRENTCLAW_BASE_URL}api/v1/torrent/${release.infoHash}",
             magnetUri = release.magnetUri,
-            infoHash = release.infoHash,
+            infoHash = infoHash,
             totalBytes = release.sizeBytes ?: 0L,
             downloadedBytes = 0L,
             status = DownloadStatus.QUEUED.name,
@@ -393,6 +612,7 @@ class DownloadManager @Inject constructor(
         if (startsWith("http")) this else BuildConfig.TORRENTCLAW_BASE_URL.trimEnd('/') + "/" + trimStart('/')
 
     companion object {
+        private const val TAG = "DownloadManager"
         /** Two concurrent transfers: enough to feel fast, gentle on mobile data. */
         private const val MAX_CONCURRENT = 2
 

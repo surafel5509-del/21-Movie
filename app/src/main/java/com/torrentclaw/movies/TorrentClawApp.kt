@@ -19,7 +19,8 @@ class TorrentClawApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         // A download that was interrupted by a process death picks up where it
-        // stopped, using the byte count persisted in Room.
+        // stopped: HTTP transfers from their byte count, torrents by rejoining
+        // the swarm (libtorrent re-checks what is already on disk).
         downloadManager.resumePending()
     }
 

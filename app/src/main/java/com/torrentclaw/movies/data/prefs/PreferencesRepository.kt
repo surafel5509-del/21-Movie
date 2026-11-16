@@ -55,6 +55,16 @@ class PreferencesRepository @Inject constructor(
 
     suspend fun setHapticFeedback(enabled: Boolean) = put(Keys.HAPTIC_FEEDBACK, enabled)
 
+    /** The user-supplied TorrentClaw API key. */
+    val apiKey: Flow<String> = dataStore.data
+        .catch { throwable ->
+            if (throwable is IOException) emit(emptyPreferences()) else throw throwable
+        }
+        .map { it[Keys.API_KEY].orEmpty() }
+        .distinctUntilChanged()
+
+    suspend fun setApiKey(key: String) = put(Keys.API_KEY, key.trim())
+
     private suspend fun <T> put(key: Key<T>, value: T) {
         dataStore.edit { it[key] = value }
     }
@@ -64,6 +74,7 @@ class PreferencesRepository @Inject constructor(
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val PREFERRED_QUALITY = stringPreferencesKey("preferred_quality")
         val PREFERRED_SORT = stringPreferencesKey("preferred_sort")
+        val API_KEY: Key<String> = stringPreferencesKey("torrentclaw_api_key")
         val HAPTIC_FEEDBACK = booleanPreferencesKey("haptic_feedback")
     }
 }

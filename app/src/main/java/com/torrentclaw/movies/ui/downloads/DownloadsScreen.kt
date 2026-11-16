@@ -147,10 +147,10 @@ fun DownloadsScreen(
                     items(uiState.active, key = { it.id }) { entity ->
                         ActiveDownloadCard(
                             entity = entity,
-                            onPause = { viewModel.pause(entity.id) },
-                            onResume = { viewModel.resume(entity.id) },
-                            onRetry = { viewModel.retry(entity.id) },
-                            onCancel = { viewModel.remove(entity.id) },
+                            onPause = { viewModel.pause(entity) },
+                            onResume = { viewModel.resume(entity) },
+                            onRetry = { viewModel.retry(entity) },
+                            onCancel = { viewModel.remove(entity) },
                         )
                     }
                 }
@@ -161,7 +161,7 @@ fun DownloadsScreen(
                         FinishedDownloadCard(
                             entity = entity,
                             onOpen = { viewModel.openTorrent(entity) },
-                            onRemove = { viewModel.remove(entity.id) },
+                            onRemove = { viewModel.remove(entity) },
                         )
                     }
                 }
@@ -171,8 +171,8 @@ fun DownloadsScreen(
                     items(uiState.failed, key = { it.id }) { entity ->
                         FailedDownloadCard(
                             entity = entity,
-                            onRetry = { viewModel.retry(entity.id) },
-                            onRemove = { viewModel.remove(entity.id) },
+                            onRetry = { viewModel.retry(entity) },
+                            onRemove = { viewModel.remove(entity) },
                         )
                     }
                 }
@@ -191,6 +191,8 @@ private fun ActiveDownloadCard(
 ) {
     val status = DownloadStatus.fromStorage(entity.status)
     val running = status == DownloadStatus.ACTIVE || status == DownloadStatus.QUEUED
+    // A torrent with metadata but no bytes yet is "searching for peers", not stuck.
+    val waitingForPeers = entity.kind == DownloadKind.TORRENT.name && entity.downloadedBytes == 0L
 
     Surface(
         shape = CardShapes.release,
@@ -227,10 +229,10 @@ private fun ActiveDownloadCard(
                         )
                     }
                     Text(
-                        text = if (entity.kind == DownloadKind.TORRENT_FILE.name) {
-                            stringResource(R.string.download_kind_torrent)
-                        } else {
-                            stringResource(R.string.download_kind_media)
+                        text = when (entity.kind) {
+                            DownloadKind.TORRENT.name -> stringResource(R.string.download_kind_movie)
+                            DownloadKind.TORRENT_FILE.name -> stringResource(R.string.download_kind_torrent)
+                            else -> stringResource(R.string.download_kind_media)
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -252,7 +254,11 @@ private fun ActiveDownloadCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = buildProgressLabel(entity),
+                        text = if (waitingForPeers) {
+                            stringResource(R.string.release_looking_for_peers)
+                        } else {
+                            buildProgressLabel(entity)
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,

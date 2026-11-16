@@ -72,6 +72,13 @@ class DownloadEntityTest {
     }
 
     @Test
+    fun `a real torrent entity uses the movie id prefix`() {
+        assertEquals("movie:ABC123", DownloadEntity.movieTorrentId("ABC123"))
+        // Distinct from the .torrent-file id so both jobs can coexist.
+        assertEquals("torrent:ABC123", DownloadEntity.torrentId("ABC123"))
+    }
+
+    @Test
     fun `mime types are guessed from the file extension`() {
         assertEquals("application/x-bittorrent", FileDownloader.guessMimeType("Dune.2010.1080p.torrent"))
         assertEquals("video/mp4", FileDownloader.guessMimeType("movie.MP4"))

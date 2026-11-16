@@ -12,7 +12,7 @@ import okhttp3.Response
  * the anonymous 30 req/min tier instead of failing with 401.
  */
 class AuthInterceptor(
-    private val apiKey: String,
+    private val apiKeyProvider: ApiKeyProvider,
     private val userAgent: String,
 ) : Interceptor {
 
@@ -23,6 +23,9 @@ class AuthInterceptor(
             // Tells TorrentClaw which client is calling, for their analytics.
             .header("X-Search-Source", "android")
 
+        // Read per request: the user can add a key in Settings without the
+        // OkHttp client being rebuilt.
+        val apiKey = apiKeyProvider.current
         if (apiKey.isNotBlank()) {
             builder.header("X-API-Key", apiKey)
             builder.header("Authorization", "Bearer $apiKey")
