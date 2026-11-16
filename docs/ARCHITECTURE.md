@@ -194,12 +194,27 @@ DownloadEntity ──(status)──▶ DownloadManager.jobs[id]
   `Migration(1, 2)` with matching indices; there is a unit test asserting the
   entity's id/progress semantics so a refactor cannot silently break the queue.
 
-### Why not an embedded BitTorrent engine
+### Embedded BitTorrent engine (v1.1)
 
-A P2P engine needs a foreground service, wake locks, per-IP tracker handling,
-port management and thermal testing — plus it changes the app's legal posture
-from "index client" to "downloader". This app instead fetches the `.torrent`
-(an ordinary HTTPS resource) and hands it to the client the user already trusts.
+`data/torrent/TorrentEngine` wraps libtorrent through libtorrent4j:
+
+| Concern | Decision |
+| --- | --- |
+| Threading | One dedicated single-thread executor owns the session. Every SWIG call blocks, so all public methods are fire-and-forget `execute {}` hops. |
+| Progress | Polled at 1 Hz from `handle.status()` and published as a `StateFlow<Map<hash, TorrentProgress>>`. libtorrent's alerts are event-based and unsuitable for smooth UI. |
+| Background | `TorrentService` is a `dataSync` foreground service mirroring progress into a notification; it stops itself ~5 s after the last active torrent. |
+| File selection | On metadata arrival every file gets `Priority.IGNORE` except media/subtitle extensions and everything containing "sample". |
+| Failure reporting | `METADATA_FAILED` and a 60 s "no peers and no metadata" watchdog surface actionable errors instead of an eternal 0 %. |
+| Restart | No fastresume blobs: torrents are re-added from the persisted magnet and libtorrent re-checks existing pieces. |
+
+### The anonymous-tier trap
+
+TorrentClaw omits `infoHash`/`magnetUrl`/`torrentUrl` for anonymous clients.
+The mapper originally dropped those releases, so every movie rendered
+"No torrents indexed yet" — while the payload clearly contained 10+ ranked
+releases. Releases are now kept as metadata-only rows (not downloadable), and
+the UI explains that a free API key unlocks downloads. `ReleaseMappingTest`
+pins this behaviour against a captured real payload.
 
 ## 6. Navigation
 

@@ -160,7 +160,7 @@ fun DownloadsScreen(
                     items(uiState.completed, key = { it.id }) { entity ->
                         FinishedDownloadCard(
                             entity = entity,
-                            onOpen = { viewModel.openTorrent(entity) },
+                            onOpen = { viewModel.open(entity) },
                             onRemove = { viewModel.remove(entity) },
                         )
                     }
@@ -339,10 +339,12 @@ private fun FinishedDownloadCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (entity.kind == DownloadKind.TORRENT_FILE.name) {
+            // Finished movies play in a video player; finished .torrent files open
+            // in the user's torrent client.
+            if (entity.kind == DownloadKind.TORRENT_FILE.name || entity.kind == DownloadKind.TORRENT.name) {
                 IconButton(onClick = onOpen) {
                     Icon(
-                        Icons.Rounded.OpenInNew,
+                        if (entity.kind == DownloadKind.TORRENT.name) Icons.Rounded.PlayArrow else Icons.Rounded.OpenInNew,
                         contentDescription = stringResource(R.string.download_open),
                         tint = MaterialTheme.colorScheme.primary,
                     )

@@ -1,11 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Paths the FileProvider may hand to other apps. Only finished .torrent files
-  are shared (opened in the user's torrent client); staged partial downloads are
-  deliberately excluded so a half-written file can never leak.
+  Paths the FileProvider may hand to other apps.
+
+  `external_files_path` scopes "Movies/" to getExternalFilesDir(), which is the
+  exact folder the BitTorrent engine writes into. It must stay in sync with
+  DownloadManager.downloadsDir(); without it every finished movie would fail to
+  resolve a URI and the player would never open.
+
+  Only finished files are ever shared, so a half-written download cannot leak.
 -->
 <paths>
     <external-path name="external_downloads" path="Download/TorrentClaw/" />
-    <external-files-path name="external_files" path="Download/" />
+    <external-files-path name="external_files_movies" path="Movies/" />
+    <external-files-path name="external_files_download" path="Download/" />
     <cache-path name="torrent_cache" path="downloads_staging/" />
 </paths>

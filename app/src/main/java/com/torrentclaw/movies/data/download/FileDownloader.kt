@@ -215,14 +215,23 @@ class FileDownloader @Inject constructor(
         private const val BUFFER_SIZE = 64 * 1024
         private const val PROGRESS_INTERVAL_MS = 250L
 
+        /**
+         * Every extension in `TorrentEngine.WANTED_EXTENSIONS` must map to a real
+         * type here: an unknown extension becomes `application/octet-stream`, which
+         * no video player will open.
+         */
         fun guessMimeType(fileName: String): String = when (fileName.substringAfterLast('.', "").lowercase()) {
             "torrent" -> "application/x-bittorrent"
             "mp4", "m4v" -> "video/mp4"
             "mkv" -> "video/x-matroska"
             "avi" -> "video/x-msvideo"
+            "mov" -> "video/quicktime"
             "webm" -> "video/webm"
+            "ts", "m2ts" -> "video/mp2t"
             "srt" -> "application/x-subrip"
+            "ass", "ssa" -> "text/x-ssa"
             "vtt" -> "text/vtt"
+            "sub" -> "text/plain"
             else -> "application/octet-stream"
         }
     }

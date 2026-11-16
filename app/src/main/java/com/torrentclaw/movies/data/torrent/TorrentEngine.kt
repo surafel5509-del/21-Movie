@@ -59,7 +59,7 @@ data class TorrentProgress(
  *  - **Resume needs no fastresume file.** libtorrent re-checks the files it
  *    finds under the save path and resumes from the verified pieces, so a
  *    process death costs a check, not a re-download.
- *  - **Only media is fetched.** On metadata arrival every file gets [Priority.SKIP]
+ *  - **Only media is fetched.** On metadata arrival every file gets [Priority.IGNORE]
  *    except video/subtitle extensions, so samples and .nfo/.exe junk are never
  *    downloaded.
  */
@@ -83,6 +83,24 @@ class TorrentEngine @Inject constructor() {
 
     /** Upper-case hex info hash → handle. */
     private val handles = ConcurrentHashMap<String, TorrentHandle>()
+
+    /** Upper-case hex info hash → parsed SHA-1, for lookups before a handle exists. */
+    private val hashes = ConcurrentHashMap<String, org.libtorrent4j.Sha1Hash>()
+
+    /** Torrents the user paused; the ticker and the service treat them as idle. */
+    private val paused = ConcurrentHashMap.newKeySet<String>()
+
+    /** Torrents whose media-only file priorities have been applied. */
+    private val prioritized = ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * Adds that arrived before the session existed. A download can be enqueued
+     * while the foreground service is still spinning the session up, and
+     * libtorrent4j's add calls block — dropping those would silently lose the
+     * download, so they are replayed on [start]. Only touched from the engine
+     * thread.
+     */
+    private val pendingAdds = LinkedHashMap<String, Pair<TorrentRelease, File>>()
 
     /** When each torrent last made progress, for stall detection. */
     private val lastActivity = ConcurrentHashMap<String, Long>()
@@ -142,6 +160,14 @@ class TorrentEngine @Inject constructor() {
         running = true
         startTicker()
         Log.i(TAG, "libtorrent ${libtorrentVersion()} started → ${downloadDir.absolutePath}")
+
+        // Replay anything that was enqueued before the session came up.
+        if (pendingAdds.isNotEmpty()) {
+            val queued = pendingAdds.toList()
+            pendingAdds.clear()
+            queued.forEach { (_, entry) -> addTorrentNow(entry.first, entry.second) }
+            Log.i(TAG, "replayed ${queued.size} queued torrent(s)")
+        }
     }
 
     /**
@@ -149,10 +175,24 @@ class TorrentEngine @Inject constructor() {
      * gives us); a `.torrent` payload is used when the caller already has one.
      */
     fun addTorrent(release: TorrentRelease, downloadDir: File) = onEngine {
-        val session = manager ?: return@onEngine
+        if (manager == null) {
+            // The session is not up yet (service still starting). Keep the add and
+            // replay it from start(); otherwise this download is silently lost.
+            pendingAdds[release.key.uppercase()] = release to downloadDir
+            Log.i(TAG, "session not ready, queued ${release.key.uppercase()} for replay")
+            return@onEngine
+        }
+        addTorrentNow(release, downloadDir)
+    }
+
+    /** Adds a release to the live session. Must run on the engine thread. */
+    private fun addTorrentNow(release: TorrentRelease, downloadDir: File) {
+        val session = manager ?: return
         // Same canonical form the alerts and progress map use (upper-case hex).
         val hash = release.key.uppercase()
         runCatching { downloadDir.mkdirs() }
+        paused.remove(hash)
+        prioritized.remove(hash)
 
         // Local vals: `torrentBytes` is mutable and `playableMagnet` is a custom
         // getter, so neither can be smart-cast at the call site.
@@ -164,20 +204,24 @@ class TorrentEngine @Inject constructor() {
                 val info = runCatching { TorrentInfo(torrentBytes) }.getOrNull()
                 if (info == null) {
                     fail(hash, "That .torrent file could not be decoded.")
-                    return@onEngine
+                    return
                 }
                 session.download(info, downloadDir, null, null, null, TorrentFlags.AUTO_MANAGED)
+                hashes[hash] = info.infoHash()
                 session.find(info.infoHash())
             }
             magnet != null -> {
                 session.download(magnet, downloadDir, TorrentFlags.AUTO_MANAGED)
-                release.infoHash
-                    ?.let { runCatching { org.libtorrent4j.Sha1Hash.parseHex(it) }.getOrNull() }
-                    ?.let { session.find(it) }
+                // A magnet's hash is known up front, so remember it: this is how the
+                // handle is found again after a magnet-add that returns no handle.
+                val sha = runCatching { org.libtorrent4j.Sha1Hash.parseHex(release.infoHash!!) }
+                    .getOrNull()
+                if (sha != null) hashes[hash] = sha
+                sha?.let { session.find(it) }
             }
             else -> {
                 fail(hash, "This release has no info hash — add a free API key in Settings.")
-                return@onEngine
+                return
             }
         }
 
@@ -193,25 +237,50 @@ class TorrentEngine @Inject constructor() {
     }
 
     fun pause(infoHash: String) = onEngine {
-        handles[infoHash]?.let { runCatching { it.pause() } }
+        val hash = infoHash.uppercase()
+        paused.add(hash)
+        handleFor(hash)?.let { runCatching { it.pause() } }
         refresh()
     }
 
     fun resume(infoHash: String) = onEngine {
-        handles[infoHash]?.let { runCatching { it.resume() } }
+        val hash = infoHash.uppercase()
+        paused.remove(hash)
+        handleFor(hash)?.let { runCatching { it.resume() } }
         refresh()
     }
 
+    /**
+     * Resolves a handle, re-finding it in the session when the add handed us no
+     * handle (magnet metadata still pending) or after it was lost.
+     */
+    private fun handleFor(hash: String): TorrentHandle? {
+        handles[hash]?.let { return it }
+        val session = manager ?: return null
+        val sha = hashes[hash]
+            ?: runCatching { org.libtorrent4j.Sha1Hash.parseHex(hash) }.getOrNull()
+            ?: return null
+        val found = runCatching { session.find(sha) }.getOrNull() ?: return null
+        hashes[hash] = sha
+        handles[hash] = found
+        return found
+    }
+
     fun remove(infoHash: String) = onEngine {
-        val handle = handles.remove(infoHash)
+        val hash = infoHash.uppercase()
+        pendingAdds.remove(hash)
+        val handle = handles.remove(hash) ?: handleFor(hash)
         if (handle != null) {
             runCatching { handle.pause() }
             runCatching { manager?.remove(handle) }
         }
-        lastActivity.remove(infoHash)
-        stalledReported.remove(infoHash)
-        _progress.value = _progress.value - infoHash
-        _errors.value = _errors.value - infoHash
+        hashes.remove(hash)
+        paused.remove(hash)
+        prioritized.remove(hash)
+        lastActivity.remove(hash)
+        stalledReported.remove(hash)
+        _progress.value = _progress.value - hash
+        _errors.value = _errors.value - hash
     }
 
     /** True while libtorrent is swarming at least one torrent. */
@@ -223,7 +292,10 @@ class TorrentEngine @Inject constructor() {
      * the UI can show bytes instead of a bare percentage.
      */
     private fun onMetadata(hash: String) {
-        val handle = handles[hash]
+        // handleFor() also covers the magnet race: the alert can arrive before the
+        // add returned a handle, and a null handle here used to skip prioritisation
+        // entirely, so samples and junk were downloaded too.
+        val handle = handleFor(hash)
         val info = handle?.let { runCatching { it.torrentFile() }.getOrNull() }
         if (handle != null && info != null) {
             runCatching {
@@ -234,7 +306,8 @@ class TorrentEngine @Inject constructor() {
                     if (isWanted(path)) priorities[index] = Priority.DEFAULT
                 }
                 handle.prioritizeFiles(priorities)
-            }
+                prioritized.add(hash)
+            }.onFailure { Log.w(TAG, "could not prioritise files for $hash", it) }
         }
         _progress.value = _progress.value.toMutableMap().apply {
             this[hash]?.let { current ->
@@ -273,19 +346,42 @@ class TorrentEngine @Inject constructor() {
         val snapshot = LinkedHashMap<String, TorrentProgress>(handles.size + 1)
         val now = System.currentTimeMillis()
 
+        // Attach handles that were not available when addTorrent() ran (magnet
+        // metadata pending) so their progress is not invisible forever.
+        hashes.keys.forEach { hash -> handleFor(hash) }
+
         handles.forEach { (hash, handle) ->
-            val status: TorrentStatus = runCatching { handle.status() }.getOrNull() ?: return@forEach
-            val total = status.totalWanted().takeIf { it > 0 } ?: status.total()
-            val done = status.totalWantedDone().takeIf { it > 0 } ?: status.totalDone()
-            val rate = status.downloadRate().toLong()
+            val status: TorrentStatus = runCatching { handle.status() }.getOrNull() ?: runCatching {
+                handleFor(hash)?.status()
+            }.getOrNull() ?: return@forEach
+
+            val isPaused = paused.contains(hash)
+            val hasMeta = status.hasMetadata()
+            val total = status.totalWanted().takeIf { it > 0 }
+                ?: status.total()
+            // Media-only priorities mean totalWanted() is smaller than the torrent,
+            // so "done" must come from the payload counter; totalDone() also counts
+            // verified-but-ignored pieces and would overstate progress.
+            val doneWanted = status.totalWantedDone()
+            val done = when {
+                doneWanted > 0 -> doneWanted
+                total > 0 -> status.totalDone().coerceAtMost(total)
+                else -> status.totalDone()
+            }
+            val rate = if (isPaused) 0L else status.downloadRate().toLong()
             val finished = status.isFinished() || status.isSeeding()
 
-            if (done > (snapshot[hash]?.downloadedBytes ?: 0L)) lastActivity[hash] = now
+            // Stall detection needs the *last time we moved*, not a snapshot diff.
+            val previous = _progress.value[hash]?.downloadedBytes ?: 0L
+            if (done > previous) {
+                lastActivity[hash] = now
+                stalledReported.remove(hash)
+            }
 
             snapshot[hash] = TorrentProgress(
                 infoHash = hash,
-                state = status.state().name.lowercase(),
-                hasMetadata = status.hasMetadata(),
+                state = if (isPaused) "paused" else status.state().name.lowercase(),
+                hasMetadata = hasMeta,
                 progress = when {
                     finished -> 1f
                     total > 0 -> (done.toFloat() / total).coerceIn(0f, 1f)
@@ -294,40 +390,37 @@ class TorrentEngine @Inject constructor() {
                 downloadedBytes = done,
                 totalBytes = total,
                 downloadRate = rate,
-                uploadRate = status.uploadRate().toLong(),
+                uploadRate = if (isPaused) 0L else status.uploadRate().toLong(),
                 peers = status.numPeers(),
                 seeds = status.numSeeds(),
                 etaSeconds = when {
-                    rate <= 0 -> -1L
-                    else -> ((total - done) / rate).coerceIn(0L, MAX_ETA_SECONDS)
+                    rate <= 0 || total <= 0 -> -1L
+                    else -> ((total - done).coerceAtLeast(0L) / rate).coerceIn(0L, MAX_ETA_SECONDS)
                 },
                 name = runCatching { status.name() }.getOrNull(),
                 isFinished = finished,
+                pausing = isPaused,
             )
 
-            // Stall detection: libtorrent happily sits at 0 peers forever, which
-            // looks identical to a hang. Say something useful instead.
-            if (!finished && !status.hasMetadata() && status.numPeers() == 0) {
+            // Metadata has arrived but the alert was missed (or landed before the
+            // handle existed): apply media priorities from here instead.
+            if (hasMeta && prioritized.add(hash)) {
+                onMetadata(hash)
+            }
+
+            // Peerless torrents sit at 0 % forever and look identical to a hang, so
+            // explain it. Only after metadata, because a metadata fetch legitimately
+            // starts with zero peers for a while — a metadata timeout would fire on
+            // every single download and mark it FAILED.
+            if (!finished && !isPaused && hasMeta && status.numPeers() == 0) {
                 val idleSince = lastActivity[hash] ?: now
-                if (now - idleSince > METADATA_TIMEOUT_MILLIS && stalledReported.add(hash)) {
+                if (now - idleSince > STALL_TIMEOUT_MILLIS && stalledReported.add(hash)) {
                     fail(
                         hash,
-                        "No peers found for this torrent after 60s. It may be dead, or your " +
+                        "No peers are responding for this torrent. It may be dead, or your " +
                             "network may block BitTorrent traffic.",
                     )
                 }
-            }
-        }
-
-        // A torrent whose handle appeared after addTorrent() (magnet parsing is
-        // asynchronous) gets attached here.
-        handles.keys.toList().forEach { hash ->
-            if (snapshot.containsKey(hash)) return@forEach
-            val found = session
-                ?.let { runCatching { it.find(org.libtorrent4j.Sha1Hash.parseHex(hash)) }.getOrNull() }
-            if (found != null) {
-                handles[hash] = found
-                runCatching { found.resume() }
             }
         }
 
@@ -354,7 +447,11 @@ class TorrentEngine @Inject constructor() {
         manager = null
         running = false
         handles.clear()
+        hashes.clear()
+        paused.clear()
+        prioritized.clear()
         lastActivity.clear()
+        stalledReported.clear()
         _progress.value = emptyMap()
     }
 
@@ -377,7 +474,8 @@ class TorrentEngine @Inject constructor() {
         private const val TICK_MILLIS = 1000L
         private const val MAX_CONNECTIONS = 200
         private const val MAX_ETA_SECONDS = 86_400L * 7
-        private const val METADATA_TIMEOUT_MILLIS = 60_000L
+        /** Metadata has its own, longer allowance than a mid-download stall. */
+        private const val STALL_TIMEOUT_MILLIS = 90_000L
 
         private const val DHT_BOOTSTRAP =
             "router.bittorrent.com:6881,router.utorrent.com:6881,dht.transmissionbt.com:6881," +

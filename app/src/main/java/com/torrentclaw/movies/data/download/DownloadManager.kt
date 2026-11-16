@@ -47,15 +47,13 @@ sealed interface DownloadNotice {
 /**
  * Owns the download queue.
  *
- * Why a hand-rolled manager instead of WorkManager or a torrent engine:
- *  - TorrentClaw serves `.torrent` files over HTTPS, so getting one is a plain
- *    resumable HTTP transfer — no P2P stack required.
- *  - Running a BitTorrent client inside the app would mean shipping a native
- *    engine, a foreground service and a battery/thermal budget the project
- *    cannot responsibly claim to have tested. Media downloading is delegated to
- *    the user's installed client via the magnet/.torrent handoff.
- *  - A [Semaphore] bounds concurrency to 2 transfers so mobile data and disk
- *    aren't saturated.
+ * Two engines behind one queue:
+ *  - **BitTorrent ([TorrentEngine])** does the actual movie downloads. A magnet
+ *    joins the swarm in-process; [TorrentService] keeps it alive in the
+ *    background and [observeTorrentEngine] mirrors live progress into Room.
+ *  - **HTTP ([FileDownloader])** fetches `.torrent` files (so the user can hand
+ *    one to a desktop client) and any direct media URL. A [Semaphore] bounds it
+ *    to 2 concurrent transfers so mobile data and disk aren't saturated.
  *
  * State lives in Room; the manager only keeps [Job] handles in memory, so a
  * process restart resumes from the last persisted byte count.
@@ -171,7 +169,7 @@ class DownloadManager @Inject constructor(
         dao.upsert(entity)
         startTorrentSession()
         torrentEngine.addTorrent(release, downloadsDir())
-        observeTorrentEngine(id, infoHash.uppercase())
+        observeTorrentEngine(id, infoHash.uppercase(), release)
         id
     }
 
@@ -179,7 +177,14 @@ class DownloadManager @Inject constructor(
     private fun downloadsDir(): File =
         File(context.getExternalFilesDir(null) ?: context.filesDir, "Movies").apply { mkdirs() }
 
-    /** Starts the foreground service, which starts and owns the engine session. */
+    /**
+     * Starts the foreground service, which starts and owns the engine session.
+     *
+     * `startService()` throws `IllegalStateException` when it is called while the
+     * app is in the background (which `resumePending()` does at process start) —
+     * from API 26 a service intended to run in the foreground must be started
+     * with `startForegroundService()`.
+     */
     private fun startTorrentSession() {
         runCatching { TorrentService.start(context) }
             .onFailure { Log.w(TAG, "could not start the torrent service", it) }
@@ -190,7 +195,11 @@ class DownloadManager @Inject constructor(
      * are updated, and only when a value actually changed, so the database write
      * rate stays at ~1 Hz instead of 60.
      */
-    private fun observeTorrentEngine(id: String, infoHash: String) {
+    private fun observeTorrentEngine(
+        id: String,
+        infoHash: String,
+        release: TorrentRelease? = null,
+    ) {
         if (engineWatchers.add(id)) {
             scope.launch {
                 torrentEngine.progress.collect { snapshot ->
@@ -198,6 +207,9 @@ class DownloadManager @Inject constructor(
                     val current = dao.findById(id) ?: return@collect
                     val status = when {
                         progress.isFinished -> DownloadStatus.COMPLETED.name
+                        // A user pause must survive a progress tick, otherwise the
+                        // row flips back to ACTIVE a second later.
+                        progress.pausing -> DownloadStatus.PAUSED.name
                         else -> DownloadStatus.ACTIVE.name
                     }
                     if (current.downloadedBytes == progress.downloadedBytes &&
@@ -214,18 +226,36 @@ class DownloadManager @Inject constructor(
                         eta = progress.etaSeconds,
                         now = System.currentTimeMillis(),
                     )
-                    if (progress.isFinished && current.status != DownloadStatus.COMPLETED.name) {
-                        _notices.value = DownloadNotice.Completed(
-                            id = id,
-                            title = current.movieTitle,
-                            path = current.localPath,
-                        )
+                    if (progress.isFinished) {
+                        // Remember the exact file libtorrent wrote: scanning the
+                        // save path later could pick a *different* movie.
+                        val saved = progress.name
+                        if (!saved.isNullOrBlank() && current.localPath != saved) {
+                            dao.updateStatus(
+                                id = id,
+                                status = DownloadStatus.COMPLETED.name,
+                                error = null,
+                                localPath = saved,
+                                now = System.currentTimeMillis(),
+                            )
+                        }
+                        // Finished means any earlier stall warning is obsolete.
+                        torrentEngine.clearError(infoHash)
+                        if (current.status != DownloadStatus.COMPLETED.name) {
+                            _notices.value = DownloadNotice.Completed(
+                                id = id,
+                                title = current.movieTitle,
+                                path = current.localPath,
+                            )
+                        }
                     }
                 }
             }
             scope.launch {
                 torrentEngine.errors.collect { errors ->
                     val reason = errors[infoHash] ?: return@collect
+                    // A finished download cannot be failed by a late stall report.
+                    if (dao.findById(id)?.status == DownloadStatus.COMPLETED.name) return@collect
                     dao.updateStatus(
                         id = id,
                         status = DownloadStatus.FAILED.name,
@@ -293,7 +323,7 @@ class DownloadManager @Inject constructor(
                     isRepack = false,
                 )
                 torrentEngine.addTorrent(release, downloadsDir())
-                observeTorrentEngine(entity.id, infoHash)
+                observeTorrentEngine(entity.id, infoHash, release)
             }
         }
     }
@@ -583,6 +613,81 @@ class DownloadManager @Inject constructor(
     /** True when this download can be opened as a finished file. */
     fun localFileExists(entity: DownloadEntity): Boolean =
         entity.localPath?.let { resolveFile(it)?.exists() } == true
+
+    /**
+     * Opens a finished download: a `.torrent` goes to the user's client, a
+     * downloaded movie goes to the video player. This is the payoff of the whole
+     * pipeline, so it must work for the files the engine actually writes.
+     */
+    fun openDownloadedFile(entity: DownloadEntity): Boolean {
+        if (entity.kind == DownloadKind.TORRENT_FILE.name) return openTorrentFile(entity)
+        if (entity.kind != DownloadKind.TORRENT.name) return false
+
+        val file = findDownloadedMedia(entity) ?: return false
+        return try {
+            val uri: Uri = FileProvider.getUriForFile(
+                context,
+                "${BuildConfig.APPLICATION_ID}.fileprovider",
+                file,
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, FileDownloader.guessMimeType(file.name))
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "no player could open ${file.name}", e)
+            false
+        }
+    }
+
+    /**
+     * Finds the largest media file a torrent wrote. libtorrent creates the
+     * torrent's own folder under the save path, so the file is nested at least
+     * one level down and its real name is not the release title.
+     */
+    fun findDownloadedMedia(entity: DownloadEntity): File? {
+        val root = downloadsDir()
+        // Preferred: the torrent's own name, recorded when it finished.
+        val named = entity.localPath?.takeIf { it.isNotBlank() && it != root.absolutePath }?.let {
+            val direct = File(it)
+            if (direct.isFile) return@let direct
+            if (direct.isDirectory) return@let direct.walkTopDown()
+                .filter { f -> f.isFile && FileDownloader.guessMimeType(f.name).startsWith("video/") }
+                .maxByOrNull { f -> f.length() }
+            null
+        }
+        if (named != null && named.exists()) return named
+
+        // Fallbacks: the save path itself, or media whose name matches the release.
+        if (root.exists()) {
+            val media = root.walkTopDown()
+                .filter { it.isFile && FileDownloader.guessMimeType(it.name).startsWith("video/") }
+                .toList()
+            val byName = media.firstOrNull { file ->
+                entity.movieTitle.isNotBlank() &&
+                    file.name.contains(entity.movieTitle, ignoreCase = true)
+            }
+            if (byName != null) return byName
+            if (entity.localPath == root.absolutePath) media.maxByOrNull { it.length() }?.let { return it }
+            // Last resort: only trust a media file whose parent names this torrent.
+            entity.fileName?.takeIf { it.isNotBlank() }?.let { name ->
+                media.firstOrNull { file ->
+                    file.parentFile?.name?.contains(name, ignoreCase = true) == true
+                }?.let { return it }
+            }
+        }
+        // Not in the save path: fall back to the published shared folder.
+        val published = File(
+            android.os.Environment.getExternalStoragePublicDirectory(
+                android.os.Environment.DIRECTORY_DOWNLOADS,
+            ),
+            "TorrentClaw/${entity.fileName}",
+        )
+        return published.takeIf { it.exists() && it.isFile }
+    }
 
     private fun resolveFile(path: String): File? {
         val direct = File(path)

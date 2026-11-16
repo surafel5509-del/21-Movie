@@ -102,12 +102,25 @@ class DownloadsViewModel @Inject constructor(
 
     fun clearFinished() = viewModelScope.launch { downloadManager.clearFinished() }
 
-    /** Opens a finished `.torrent` in the user's client; returns false when none handled it. */
-    fun openTorrent(entity: DownloadEntity): Boolean {
-        if (entity.kind != DownloadKind.TORRENT_FILE.name) return false
-        val opened = downloadManager.openTorrentFile(entity)
+    /**
+     * Opens a finished download. A `.torrent` opens in the user's client, a
+     * downloaded movie opens in a video player. Returns false when nothing could
+     * handle it, so the UI can say something useful.
+     */
+    fun open(entity: DownloadEntity): Boolean {
+        val opened = downloadManager.openDownloadedFile(entity)
         if (!opened) {
-            _message.value = "No torrent app could open this file. Install qBittorrent or Flud."
+            _message.value = when (entity.kind) {
+                DownloadKind.TORRENT_FILE.name ->
+                    "No torrent app could open this file. Install qBittorrent or Flud."
+                DownloadKind.TORRENT.name ->
+                    if (downloadManager.findDownloadedMedia(entity) == null) {
+                        "The video file is missing. It may have been deleted — retry the download."
+                    } else {
+                        "No video player could open this file."
+                    }
+                else -> "Nothing on this device can open this file."
+            }
         }
         return opened
     }

@@ -22,16 +22,18 @@ It is **not** a demo: there are no `TODO`s, every state (loading, empty, error,
 offline, rate-limited, no torrent client installed) is implemented, and the
 README documents the exact commands, versions and gotchas needed to build it.
 
-**Downloads are real.** Releases expose a **Download .torrent** action that
-streams the file from `/api/v1/torrent/{infoHash}` with byte-level progress,
-pause/resume/cancel, a resumable `Range` transfer, and a Room-persisted queue that
-survives process death. Finished files land in `Downloads/TorrentClaw` and open in
-your torrent client via a `FileProvider` handoff.
+**Downloads are real BitTorrent downloads.** Tap a release and the app joins the
+swarm itself — a libtorrent session (via libtorrent4j) runs inside a foreground
+service, so a movie keeps downloading while the app is backgrounded. Progress,
+speed, peers and ETA are live; the queue is persisted in Room and re-checked on
+restart instead of restarting from zero. You can also export the `.torrent` file
+and hand it to any client.
 
-> ⚠️ **Legal note.** TorrentClaw is a metadata indexer. This app ships no media,
-> hosts no files and runs no download engine — it hands magnet URIs to whichever
-> torrent client you already installed. You are responsible for what you
-> download in your jurisdiction.
+> ⚠️ **Legal note.** TorrentClaw is a metadata indexer; this app ships no media and
+> hosts no files. It contains a BitTorrent engine that downloads whatever the
+> swarm serves for the magnet you pick. Download only content you have the right
+> to in your jurisdiction, and note that BitTorrent traffic is visible to your
+> ISP unless you use a VPN.
 
 ---
 
@@ -57,6 +59,38 @@ testing, not for the Play Store.
 
 ## Downloads — how it actually works
 
+**You need a free TorrentClaw API key for downloads.** This is not a paywall of
+ours: on the anonymous tier the API strips `infoHash`, `magnetUrl` and
+`torrentUrl` from every response (it returns `_notice` saying so). Magnet links
+*fundamentally* require an info hash, so downloads are impossible without one.
+Paste a free key from [torrentclaw.com/register](https://torrentclaw.com/register)
+into **Settings → TorrentClaw account → Add** and it takes effect immediately
+(no restart, no rebuild). The key is stored in DataStore on the device only.
+
+### The real pipeline
+
+```
+Detail → "Download …"
+  → DetailViewModel.onDownloadMovie(release)
+  → DownloadManager.enqueueTorrentDownload(movie, release)
+        Room row (status=ACTIVE)  +  TorrentService.start()
+  → TorrentService (foreground, dataSync)
+        TorrentEngine.start(<externalFilesDir>/Movies)
+        TorrentEngine.addTorrent(release, dir)
+  → libtorrent session
+        magnet → DHT + LSD + trackers → peers
+        metadata arrives → file priorities (video/subs only)
+        pieces download → files written to Movies/
+  → TorrentEngine polls status() at 1 Hz
+  → DownloadManager writes progress into Room
+  → Downloads tab + notification update
+  → COMPLETED → "Open"/share the video, or export the .torrent
+```
+
+There is a second, independent path for the `.torrent` file itself
+(`/api/v1/torrent/{infoHash}`) streamed by `FileDownloader` with `Range` resume —
+useful when you want to hand the file to an external client. Both coexist.
+
 ```
 Detail → "Download .torrent"
   → DetailViewModel.onDownloadTorrent(release)
@@ -75,8 +109,10 @@ Design decisions worth knowing:
 
 | Decision | Why |
 | --- | --- |
-| App downloads the `.torrent` itself, not the movie bytes | The movie bytes come from the swarm; a `.torrent` is a small HTTP file the app can legitimately and reliably fetch. |
-| No embedded BitTorrent engine | Shipping a native engine means a foreground service, wake locks, battery/thermal testing and a legal surface this app does not claim. Media transfer is delegated to the user's client through the standard magnet/.torrent handoff. |
+| Embedded libtorrent engine | The request was an app that really downloads movies, not one that hands links to another app. libtorrent4j ships prebuilt natives for arm64-v8a, armeabi-v7a and x86_64. |
+| Foreground service (`dataSync`) | A swarm dies with the process. `dataSync` is the correct service type for an in-progress transfer. |
+| Media-only file priorities | `Priority.IGNORE` for everything except video/subtitle extensions, so samples, `.nfo` and `.exe` junk are never fetched. |
+| No fastresume files | libtorrent re-checks the pieces already on disk and resumes from those. Simpler and self-healing. |
 | `FileDownloader` stages to `cacheDir` then publishes | A partial file never shows up as a real download; publishing is atomic-ish per platform rules. |
 | Progress persisted in Room, not just in memory | The queue survives process death; `TorrentClawApp` calls `resumePending()` on start. |
 | Semaphore(2) | Two parallel transfers keep the UI responsive and mobile data sane. |
@@ -220,6 +256,9 @@ installable APKs.
 | `test` | `:app:testDebugUnitTest` + `:app:lintDebug` | reports |
 | `build-debug` | `:app:assembleDebug` | `TorrentClawMovies-debug-apk` |
 | `build-release` | `:app:assembleRelease` (tags `v*` or manual dispatch) | `TorrentClawMovies-release-apk`, attached to the GitHub Release |
+
+The APK is ~38 MB because it carries libtorrent's native libraries for three ABIs.
+A per-ABI split (App Bundle) would halve that for individual devices.
 
 On failure the first ~60 lines of the Gradle output are posted as a **commit
 comment** (`Error`/`e:`/`What went wrong` lines only), so a red build is

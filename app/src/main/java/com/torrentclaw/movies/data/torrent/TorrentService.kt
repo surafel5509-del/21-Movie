@@ -80,13 +80,15 @@ class TorrentService : Service() {
         if (monitor?.isActive == true) return
         monitor = scope.launch {
             engine.progress.collectLatest { snapshot ->
-                val active = snapshot.values.filter { !it.isFinished }
+                // Paused torrents are deliberately idle: they must not keep a
+                // dataSync service (and its notification) alive.
+                val active = snapshot.values.filter { !it.isFinished && !it.pausing }
                 if (active.isEmpty() && snapshot.isNotEmpty()) {
                     notifyFinished(snapshot)
                 } else if (snapshot.isEmpty()) {
                     // Nothing queued: let the system reclaim us after a grace period.
                     delay(IDLE_GRACE_MILLIS)
-                    if (engine.progress.value.values.none { !it.isFinished }) stopSelf()
+                    if (engine.progress.value.values.none { !it.isFinished && !it.pausing }) stopSelf()
                 } else {
                     val done = active.sumOf { it.downloadedBytes }
                     val total = active.sumOf { it.totalBytes }
@@ -205,9 +207,19 @@ class TorrentService : Service() {
         private const val IDLE_GRACE_MILLIS = 5_000L
         const val ACTION_STOP = "com.torrentclaw.movies.action.STOP_TORRENTS"
 
+        /**
+         * Starts the transfer service. From API 26 it must be
+         * `startForegroundService()`: `startService()` throws while the app is in
+         * the background, which is exactly when a download is resumed.
+         */
         @JvmStatic
         fun start(context: Context) {
-            context.startService(Intent(context, TorrentService::class.java))
+            val intent = Intent(context, TorrentService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
         }
 
         @JvmStatic
