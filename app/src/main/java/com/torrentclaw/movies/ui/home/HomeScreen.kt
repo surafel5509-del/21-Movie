@@ -84,7 +84,7 @@ fun HomeScreen(
                         BrandMark()
                         Spacer(Modifier.width(10.dp))
                         Text(
-                            text = "TorrentClaw",
+                            text = stringResource(R.string.app_name),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Black,
                         )

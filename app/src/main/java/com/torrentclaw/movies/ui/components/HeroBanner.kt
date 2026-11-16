@@ -32,7 +32,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.torrentclaw.movies.R
 import com.torrentclaw.movies.domain.model.Movie
 import com.torrentclaw.movies.ui.theme.CardShapes
 
@@ -138,7 +140,7 @@ fun HeroBanner(
                 )
                 if (movie.maxSeeders > 0) {
                     Text(
-                        text = "•  ${Formatters.compactCount(movie.maxSeeders)} seeders",
+                        text = stringResource(R.string.count_seeders, Formatters.compactCount(movie.maxSeeders)),
                         style = MaterialTheme.typography.labelMedium,
                         color = Color.White.copy(alpha = 0.75f),
                     )

@@ -74,13 +74,13 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += listOf(
-            "-Xjvm-default=all",
-            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
-            "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
-        )
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+            // The screens annotate their experimental opt-ins locally, so no
+            // project-wide -opt-in is needed.
+            freeCompilerArgs.add("-Xjvm-default=all")
+        }
     }
 
     buildFeatures {

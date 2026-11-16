@@ -65,7 +65,6 @@ import com.torrentclaw.movies.ui.components.RatingBadge
 import com.torrentclaw.movies.ui.components.SkeletonBlock
 import com.torrentclaw.movies.ui.components.ErrorState
 import com.torrentclaw.movies.ui.theme.CardShapes
-import com.torrentclaw.movies.ui.theme.extendedColors
 import com.torrentclaw.movies.ui.util.MagnetLauncher
 import com.torrentclaw.movies.ui.util.rememberHaptics
 

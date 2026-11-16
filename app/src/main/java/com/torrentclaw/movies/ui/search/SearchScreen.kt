@@ -63,7 +63,6 @@ import com.torrentclaw.movies.ui.components.ListRowsSkeleton
 import com.torrentclaw.movies.ui.components.MovieRow
 import com.torrentclaw.movies.ui.components.NoResultsState
 import com.torrentclaw.movies.ui.theme.CardShapes
-import com.torrentclaw.movies.ui.theme.extendedColors
 
 /**
  * Search & filter screen: auto-focused search field, debounced query execution
