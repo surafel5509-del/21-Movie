@@ -21,6 +21,8 @@ jobs:
   verify:
     name: Live API verification
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -83,6 +85,27 @@ jobs:
           # verdict goes there as well as to the log.
           echo "::notice::tier=${TIER:-none} infoHash=$HASHES magnetUrl=$MAGNETS torrentUrl=$FILES notice=${NOTICE:-none}"
 
+          # Persist the findings in the repo: annotations and step logs have both
+          # proven unreliable to read back from here.
+          {
+            echo "# Live API verification"
+            echo
+            echo "- HTTP status: \`$CODE\`"
+            echo "- Rate-limit tier: \`${TIER:-none}\`"
+            echo "- Remaining this window: \`${REMAIN:-none}\`"
+            echo "- \`infoHash\` fields: $HASHES"
+            echo "- \`magnetUrl\` fields: $MAGNETS"
+            echo "- \`torrentUrl\` fields: $FILES"
+            echo "- API \`_notice\`: ${NOTICE:-none}"
+            echo
+            echo "First 240 chars of the response:"
+            echo '```'
+            head -c 240 "$BODY"
+            echo
+            echo '```'
+          } > api-report.md
+          cat api-report.md
+
           if [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then
             echo "::error::The API key was rejected (HTTP $CODE). No download can work."
             exit 1
@@ -112,3 +135,15 @@ jobs:
             exit 1
           fi
           echo "::notice::Anonymous tier still serves metadata."
+
+      - name: Publish the report
+        if: always()
+        run: |
+          if [ ! -f api-report.md ]; then
+            printf '# Live API verification\n\nThe keyed check did not run.\n' > api-report.md
+          fi
+          git config user.name "torrentclaw-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add api-report.md
+          git diff --cached --quiet || git commit -m "ci: live API verification report [skip ci]"
+          git push || echo "could not push the report"
