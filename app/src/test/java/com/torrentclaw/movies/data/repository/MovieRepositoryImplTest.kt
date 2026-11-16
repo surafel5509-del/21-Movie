@@ -17,6 +17,7 @@ import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
@@ -149,7 +150,8 @@ class MovieRepositoryImplTest {
         val detail = result.getOrNull()!!
         assertEquals(42, detail.movie.id)
         assertEquals(1, detail.releases.size)
-        assertTrue(detail.releases.first().magnetUri.startsWith("magnet:?xt=urn:btih:"))
+        assertNotNull(detail.releases.first().magnetUri)
+        assertTrue(detail.releases.first().magnetUri!!.startsWith("magnet:?xt=urn:btih:"))
     }
 
     @Test

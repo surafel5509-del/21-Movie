@@ -5,6 +5,7 @@ import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -107,21 +108,36 @@ class DtoMappersTest {
 
         // The second release had no magnetUrl: it must be rebuilt from the hash.
         val rebuilt = detail.releases[1].magnetUri
-        assertTrue(rebuilt.startsWith("magnet:?xt=urn:btih:"))
+        assertNotNull(rebuilt)
+        assertTrue(rebuilt!!.startsWith("magnet:?xt=urn:btih:"))
         assertTrue(rebuilt.contains("tracker.opentrackr.org"))
     }
 
+    /**
+     * This used to assert the opposite ("releases without hash or magnet are
+     * dropped"), which is the exact behaviour that made every movie show
+     * "No torrents indexed yet" on the anonymous tier. They must be kept.
+     */
     @Test
-    fun `releases without hash or magnet are dropped`() {
+    fun `releases without hash or magnet are kept but not downloadable`() {
         val dto = json.decodeFromString<SearchResponseDto>(searchJson).results.first()
-        val broken = dto.copy(
+        val anonymous = dto.copy(
             torrents = listOf(
                 dto.torrents.first().copy(infoHash = "", magnetUrl = null),
                 dto.torrents.first().copy(infoHash = "", magnetUrl = "not-a-magnet"),
             ),
         )
-        val detail = broken.toMovieDetail(resolver)
-        assertTrue(detail.releases.isEmpty())
+        val detail = anonymous.toMovieDetail(resolver)
+
+        assertEquals(2, detail.releases.size)
+        detail.releases.forEach { release ->
+            assertNull(release.infoHash)
+            assertNull(release.playableMagnet)
+            assertFalse(release.isDownloadable)
+            assertEquals(0, release.seeders.coerceAtLeast(0))
+        }
+        // Distinct keys, or the LazyColumn would crash on duplicate null keys.
+        assertEquals(2, detail.releases.map { it.key }.distinct().size)
     }
 
     @Test
