@@ -72,6 +72,9 @@ jobs:
 
           ANON_CODE=$(curl -sS -o /dev/null -w '%{http_code}' -H 'Accept: application/json' \
             'https://torrentclaw.com/api/v1/search?q=dune&type=movie&limit=1')
+          UA_CODE=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -A 'TorrentClawMovies/1.2.0 (Android)' -H 'Accept: application/json' \
+            'https://torrentclaw.com/api/v1/search?q=dune&type=movie&limit=1')
 
           echo http:$CODE tier:${TIER:-none} hashes:$HASHES magnets:$MAGNETS anon:$ANON_CODE
 
@@ -80,6 +83,7 @@ jobs:
             echo
             echo '- Keyed request: HTTP '$CODE
             echo '- Anonymous control request: HTTP '$ANON_CODE
+            echo '- Browser-UA request: HTTP '$UA_CODE
             echo '- Rate-limit tier: '${TIER:-none}
             echo '- infoHash fields: '$HASHES
             echo '- magnetUrl fields: '$MAGNETS
