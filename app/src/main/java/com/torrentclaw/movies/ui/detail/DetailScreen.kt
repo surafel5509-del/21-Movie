@@ -57,6 +57,8 @@ import com.torrentclaw.movies.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.torrentclaw.movies.domain.model.SortOption
 import com.torrentclaw.movies.domain.model.TorrentRelease
+import com.torrentclaw.movies.ui.util.MagnetLauncher
+import com.torrentclaw.movies.ui.util.MagnetOpenResult
 import com.torrentclaw.movies.ui.components.Formatters
 import com.torrentclaw.movies.ui.components.GenreTag
 import com.torrentclaw.movies.ui.components.MetaPill
@@ -65,7 +67,6 @@ import com.torrentclaw.movies.ui.components.RatingBadge
 import com.torrentclaw.movies.ui.components.SkeletonBlock
 import com.torrentclaw.movies.ui.components.ErrorState
 import com.torrentclaw.movies.ui.theme.CardShapes
-import com.torrentclaw.movies.ui.util.MagnetLauncher
 import com.torrentclaw.movies.ui.util.rememberHaptics
 
 /**
@@ -98,13 +99,13 @@ fun DetailScreen(
                 haptics.impact()
                 val result = MagnetLauncher.openMagnet(context, current.magnetUri)
                 when (result) {
-                    is MagnetLauncher.MagnetOpenResult.Launched -> viewModel.clearEffect()
-                    is MagnetLauncher.MagnetOpenResult.NoClientAvailable -> viewModel.onNoClient()
-                    is MagnetLauncher.MagnetOpenResult.InvalidLink -> {
+                    is MagnetOpenResult.Launched -> viewModel.clearEffect()
+                    is MagnetOpenResult.NoClientAvailable -> viewModel.onNoClient()
+                    is MagnetOpenResult.InvalidLink -> {
                         snackbarHostState.showSnackbar(context.getString(R.string.detail_open_magnet_malformed))
                         viewModel.clearEffect()
                     }
-                    is MagnetLauncher.MagnetOpenResult.Failed -> {
+                    is MagnetOpenResult.Failed -> {
                         snackbarHostState.showSnackbar(result.reason)
                         viewModel.clearEffect()
                     }
@@ -133,7 +134,7 @@ fun DetailScreen(
                 if (snackbar == SnackbarResult.ActionPerformed) {
                     // The user may have installed a client while the app was open.
                     val retry = MagnetLauncher.openMagnet(context, lastMagnetUri)
-                    if (retry is MagnetLauncher.MagnetOpenResult.NoClientAvailable) {
+                    if (retry is MagnetOpenResult.NoClientAvailable) {
                         snackbarHostState.showSnackbar(context.getString(R.string.detail_install_client_hint))
                     }
                 }
