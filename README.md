@@ -197,6 +197,10 @@ You must supply a signing config (see `docs/ARCHITECTURE.md#release-signing`).
 
 ## CI: build the APK on GitHub Actions
 
+**Status: green.** CI builds and tests the app on every push, and
+[v1.0.0](https://github.com/surafel5509-del/21-Movie/releases/tag/v1.0.0) ships
+installable APKs.
+
 `.github/workflows/android-ci.yml` runs three jobs:
 
 | Job | What it does | Artifact |
@@ -205,14 +209,11 @@ You must supply a signing config (see `docs/ARCHITECTURE.md#release-signing`).
 | `build-debug` | `:app:assembleDebug` | `TorrentClawMovies-debug-apk` |
 | `build-release` | `:app:assembleRelease` (tags `v*` or manual dispatch) | `TorrentClawMovies-release-apk`, attached to the GitHub Release |
 
-The workflow is committed but **GitHub Actions must be enabled for the repo**
-(see below). Once enabled:
+On failure the first ~60 lines of the Gradle output are posted as a **commit
+comment** (`Error`/`e:`/`What went wrong` lines only), so a red build is
+readable without downloading logs.
 
-```
-Repo → Actions tab → "I understand my workflows, go ahead and enable them"
-```
-
-Then either push to any branch (debug APK), or cut a tag for a release build:
+Push to any branch for a debug APK, or cut a tag for a release:
 
 ```bash
 git tag v1.0.0 && git push origin v1.0.0

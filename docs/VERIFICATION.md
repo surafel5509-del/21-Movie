@@ -94,6 +94,38 @@ stubs to type-check `data/download/*`, `data/local/DownloadEntity.kt`,
 | `DownloadsViewModel` missing `import kotlinx.coroutines.flow.asStateFlow` | Hard compile error |
 | `@Suppress`-ed dead `BuildConfig.unused()` helper | Dead code / lint noise (removed) |
 
+## 7. Real Gradle build on GitHub Actions
+
+Offline type-checking caught logic and type errors, but only a real build catches
+missing imports in Compose files and anything that depends on the actual
+AndroidX artifacts. The CI workflow closes that gap.
+
+**Run `43919521984` (push, `main` branch) — all jobs green:**
+
+| Job | Result | Evidence |
+| --- | --- | --- |
+| Unit tests & lint | ✅ | unit-test-report (14 KB), lint-report (35 KB) |
+| Build debug APK | ✅ | `TorrentClawMovies-debug-apk`, 18.9 MB |
+| Build release APK | ✅ | `TorrentClawMovies-release-apk`, 2.0 MB (minified) |
+
+**Run `43920945000` (tag `v1.0.0`) — all three jobs green**, and
+`app-release.apk` (2.25 MB) is attached to
+[the v1.0.0 release](https://github.com/surafel5509-del/21-Movie/releases/tag/v1.0.0).
+
+### Real compile errors the CI caught
+
+| File | Error | Fix |
+| --- | --- | --- |
+| `HomeScreen.kt` | `Unresolved reference 'rememberSnackbarHostState'` | Material 3 has no such function — use `remember { SnackbarHostState() }` as a default parameter |
+| `HomeScreen.kt` | `Unresolved reference 'width'` | missing `androidx.compose.foundation.layout.width` import |
+| `HomeScreen.kt` | `Unresolved reference 'Explore'` | icon referenced fully-qualified without importing it |
+| `DetailScreen.kt` | `Unresolved reference 'MagnetOpenResult'` + non-exhaustive `when` | `MagnetOpenResult` lives in `ui.util`, not as a nested member of `MagnetLauncher` |
+| `workflow` | every run failed in 0 s with no jobs | `if: ${{ secrets.X != '' }}` — the `secrets` context is not allowed in `if:`; the check moved into the step |
+
+The last one is worth remembering: GitHub reports that as a run with
+`total_count: 0` jobs and an empty log, which looks like "Actions is broken"
+rather than "the YAML is invalid".
+
 ## What still needs a real Android build
 
 Anything that depends on Compose runtime behaviour or on the exact artifact

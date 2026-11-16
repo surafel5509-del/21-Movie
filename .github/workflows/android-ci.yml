@@ -85,6 +85,21 @@ jobs:
           path: gradle-test.log
           retention-days: 7
 
+      - name: Summarise test results
+        if: always()
+        run: |
+          shopt -s nullglob
+          files=(app/build/test-results/testDebugUnitTest/*.xml)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::warning title=Unit tests::No XML results found"
+            exit 0
+          fi
+          count() {
+            grep -ho "$1=\"[0-9]*\"" "${files[@]}" | cut -d'"' -f2 | paste -sd+ | bc
+          }
+          echo "::notice title=Unit tests::$(count tests) tests, $(count failures) failures, $(count errors) errors, $(count skipped) skipped"
+          grep -h '<testcase' "${files[@]}" | sed -E 's/.*name="([^"]*)".*/PASS \1/' | head -60
+
       - name: Publish test report
         if: always()
         uses: actions/upload-artifact@v4
@@ -229,7 +244,10 @@ jobs:
       - name: Rename artifacts
         run: |
           mkdir -p artifacts
-          find app/build/outputs/apk/release -name '*.apk' -exec cp {} artifacts/ \;
+          VERSION="${GITHUB_REF_NAME//\//-}"
+          for f in app/build/outputs/apk/release/*.apk; do
+            cp "$f" "artifacts/TorrentClawMovies-${VERSION}-release.apk"
+          done
           ls -la artifacts
 
       - name: Upload release APK
@@ -244,6 +262,25 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          name: TorrentClaw Movies ${{ github.ref_name }}
           files: artifacts/*.apk
           generate_release_notes: true
           fail_on_unmatched_files: false
+          body: |
+            Sideload `TorrentClawMovies-${{ github.ref_name }}-release.apk`
+            (Android 8.0 / API 26 or newer).
+
+            The release build falls back to the debug signing key unless the
+            `KEYSTORE_*` secrets are configured, so this APK installs over a
+            previous build from the same workflow.
+
+            **In the app**
+            - Discover popular and trending movies from the TorrentClaw API
+            - Search with 400 ms debounce, quality and sort filters
+            - Detail view with collapsing backdrop, releases sorted by swarm health
+            - Open magnet links in your torrent client, or copy them
+            - Real downloads: resumable `.torrent` transfers, pause/resume/retry,
+              progress persisted across restarts, saved to `Downloads/TorrentClaw`
+
+            The app does not bundle a BitTorrent engine: it hands torrents to the
+            client you already use.
