@@ -17,6 +17,11 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import com.torrentclaw.movies.data.prefs.PreferencesRepository
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -26,8 +31,8 @@ object NetworkModule {
     private const val USER_AGENT = "TorrentClawMovies/${BuildConfig.VERSION_NAME} (Android)"
 
     /** Fire-and-forget writes from an OkHttp thread must never block a request. */
-    private val TIER_SCOPE = kotlinx.coroutines.CoroutineScope(
-        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO,
+    private val TIER_SCOPE = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO,
     )
 
     @Provides
@@ -44,7 +49,7 @@ object NetworkModule {
     @Singleton
     fun provideAuthInterceptor(
         apiKeyProvider: ApiKeyProvider,
-        preferencesRepository: com.torrentclaw.movies.data.prefs.PreferencesRepository,
+        preferencesRepository: PreferencesRepository,
     ): AuthInterceptor =
         AuthInterceptor(
             apiKeyProvider = apiKeyProvider,
