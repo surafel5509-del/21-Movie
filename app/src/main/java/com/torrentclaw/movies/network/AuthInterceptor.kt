@@ -1,5 +1,10 @@
 package com.torrentclaw.movies.network
 
+import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import okhttp3.Interceptor
 import okhttp3.Response
 /**
@@ -14,6 +19,8 @@ import okhttp3.Response
 class AuthInterceptor(
     private val apiKeyProvider: ApiKeyProvider,
     private val userAgent: String,
+    /** Receives `X-RateLimit-Tier` so Settings can show the real tier. */
+    private val onTierObserved: (String) -> Unit = {},
 ) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -31,6 +38,24 @@ class AuthInterceptor(
             builder.header("Authorization", "Bearer $apiKey")
         }
 
-        return chain.proceed(builder.build())
+        val response = chain.proceed(builder.build())
+
+        // TorrentClaw states the caller's tier on every response ("pro", "free",
+        // "anonymous"). Capturing it turns "is my key working?" from guesswork into
+        // something Settings can display, and it is the same signal that tells us
+        // whether magnets will come back.
+        response.header(HEADER_TIER)?.takeIf { it.isNotBlank() }?.let { tier ->
+            val normalised = tier.trim().lowercase()
+            if (apiKeyProvider.reportedTier != normalised) {
+                apiKeyProvider.reportedTier = normalised
+                runCatching { onTierObserved(normalised) }
+            }
+        }
+
+        return response
+    }
+
+    private companion object {
+        const val HEADER_TIER = "X-RateLimit-Tier"
     }
 }

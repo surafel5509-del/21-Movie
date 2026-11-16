@@ -36,6 +36,13 @@ class ApiKeyProvider @Inject constructor(
         get() = _apiKey.value.isNotBlank()
 
     /**
+     * Last tier the API reported for this key. Volatile rather than a StateFlow:
+     * it is written from an OkHttp thread and only read to skip redundant writes.
+     */
+    @Volatile
+    var reportedTier: String = ""
+
+    /**
      * Applies a key from persisted settings. A blank stored value keeps the
      * build-time key so a CI build stays configured even if the user clears the
      * field.

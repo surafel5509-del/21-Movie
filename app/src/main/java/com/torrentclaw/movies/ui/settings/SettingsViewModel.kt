@@ -28,6 +28,8 @@ data class SettingsUiState(
     /** True when the key came from the build, not from the user. */
     val apiKeyFromBuild: Boolean = BuildConfig.TORRENTCLAW_API_KEY.isNotBlank(),
     val apiKeyMessage: String? = null,
+    /** Tier reported by the API for the current key: "pro", "free", or blank. */
+    val apiTier: String = "",
 ) {
     val apiKeyMasked: String
         get() = if (apiKey.length <= 10) "•".repeat(apiKey.length) else "${apiKey.take(8)}…${apiKey.takeLast(4)}"
@@ -53,7 +55,8 @@ class SettingsViewModel @Inject constructor(
         preferencesRepository.apiKey,
         apiKeyProvider.apiKey,
         message,
-    ) { prefs, storedKey, effectiveKey, msg ->
+        preferencesRepository.apiTier,
+    ) { prefs, storedKey, effectiveKey, msg, tier ->
         SettingsUiState(
             preferences = prefs,
             appVersion = BuildConfig.VERSION_NAME,
@@ -61,6 +64,7 @@ class SettingsViewModel @Inject constructor(
             apiKey = effectiveKey,
             apiKeyFromBuild = storedKey.isBlank() && BuildConfig.TORRENTCLAW_API_KEY.isNotBlank(),
             apiKeyMessage = msg,
+            apiTier = tier,
         )
     }
         .stateIn(

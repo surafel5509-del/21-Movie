@@ -25,6 +25,11 @@ object NetworkModule {
     private const val TIMEOUT_SECONDS = 20L
     private const val USER_AGENT = "TorrentClawMovies/${BuildConfig.VERSION_NAME} (Android)"
 
+    /** Fire-and-forget writes from an OkHttp thread must never block a request. */
+    private val TIER_SCOPE = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO,
+    )
+
     @Provides
     @Singleton
     fun provideJson(): Json = Json {
@@ -37,8 +42,18 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideAuthInterceptor(apiKeyProvider: ApiKeyProvider): AuthInterceptor =
-        AuthInterceptor(apiKeyProvider = apiKeyProvider, userAgent = USER_AGENT)
+    fun provideAuthInterceptor(
+        apiKeyProvider: ApiKeyProvider,
+        preferencesRepository: com.torrentclaw.movies.data.prefs.PreferencesRepository,
+    ): AuthInterceptor =
+        AuthInterceptor(
+            apiKeyProvider = apiKeyProvider,
+            userAgent = USER_AGENT,
+            // Persist the tier off the network thread.
+            onTierObserved = { tier ->
+                TIER_SCOPE.launch { runCatching { preferencesRepository.setApiTier(tier) } }
+            },
+        )
 
     /**
      * The key compiled into the APK, empty in public builds. Bound separately

@@ -233,10 +233,14 @@ fun SettingsScreen(
                     SettingsRow(
                         icon = Icons.Rounded.Info,
                         title = stringResource(R.string.settings_api_status),
-                        subtitle = if (uiState.apiKeyConfigured) {
-                            stringResource(R.string.settings_api_configured)
-                        } else {
-                            stringResource(R.string.settings_api_anonymous)
+                        subtitle = when {
+                            !uiState.apiKeyConfigured ->
+                                stringResource(R.string.settings_api_anonymous)
+                            uiState.apiTier == "pro" ->
+                                stringResource(R.string.settings_api_tier_pro)
+                            uiState.apiTier == "free" ->
+                                stringResource(R.string.settings_api_tier_free)
+                            else -> stringResource(R.string.settings_api_tier_unknown)
                         },
                     )
                     SettingsRow(

@@ -55,6 +55,20 @@ class PreferencesRepository @Inject constructor(
 
     suspend fun setHapticFeedback(enabled: Boolean) = put(Keys.HAPTIC_FEEDBACK, enabled)
 
+    /**
+     * The tier the API reported for the current key ("pro", "free", ...).
+     * Cached so Settings can show it immediately after a restart, before the
+     * first request comes back.
+     */
+    val apiTier: Flow<String> = dataStore.data
+        .catch { throwable ->
+            if (throwable is IOException) emit(emptyPreferences()) else throw throwable
+        }
+        .map { prefs -> prefs[Keys.API_TIER].orEmpty() }
+        .distinctUntilChanged()
+
+    suspend fun setApiTier(tier: String) = put(Keys.API_TIER, tier.trim().lowercase())
+
     /** The user-supplied TorrentClaw API key. */
     val apiKey: Flow<String> = dataStore.data
         .catch { throwable ->
@@ -71,6 +85,7 @@ class PreferencesRepository @Inject constructor(
 
     private object Keys {
         val THEME_MODE = stringPreferencesKey("theme_mode")
+        val API_TIER = stringPreferencesKey("api_tier")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val PREFERRED_QUALITY = stringPreferencesKey("preferred_quality")
         val PREFERRED_SORT = stringPreferencesKey("preferred_sort")

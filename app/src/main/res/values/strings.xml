@@ -94,8 +94,12 @@
     <string name="settings_version_title">Version</string>
     <string name="settings_data_source_title">Metadata source</string>
     <string name="settings_api_status">TorrentClaw API key</string>
-    <string name="settings_api_configured">Configured · 120 req/min</string>
-    <string name="settings_api_anonymous">Anonymous · 30 req/min</string>
+    <string name="settings_api_configured">Key active · magnets unlocked</string>
+    <string name="settings_api_anonymous">Anonymous · movies are browsable, downloads locked</string>
+    <string name="settings_api_tier_pro">PRO tier · 1,000 req/min · downloads unlocked</string>
+    <string name="settings_api_tier_free">Free tier · 120 req/min · downloads unlocked</string>
+    <string name="settings_api_tier_unknown">Key active · tier not verified yet</string>
+    <string name="settings_api_locked_hint">Add your free TorrentClaw API key to unlock downloads. Without one the API withholds magnet links, so nothing can download.</string>
     <string name="settings_data_source">Metadata by TMDB via TorrentClaw</string>
 
     <!-- Search extras -->
