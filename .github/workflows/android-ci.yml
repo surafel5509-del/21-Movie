@@ -50,7 +50,24 @@ jobs:
         run: chmod +x gradlew
 
       - name: Unit tests
-        run: ./gradlew :app:testDebugUnitTest --stacktrace
+        run: |
+          set +e
+          ./gradlew :app:testDebugUnitTest --stacktrace --console=plain 2>&1 | tee gradle-test.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            # Surface compiler/test failures as check annotations (readable in the UI).
+            grep -nE "^e: |error:|FAILED|What went wrong|Caused by:|Unresolved reference|Compilation error" gradle-test.log \
+              | head -40 | while IFS= read -r line; do echo "::error title=Unit tests::$line"; done
+            exit "$status"
+          fi
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-test-log
+          path: gradle-test.log
+          retention-days: 7
 
       - name: Publish test report
         if: always()
@@ -60,8 +77,10 @@ jobs:
           path: app/build/reports/tests/testDebugUnitTest/
           retention-days: 7
 
+      # Lint is advisory here: it never blocks the APK, but the report is kept.
       - name: Android Lint
-        run: ./gradlew :app:lintDebug --stacktrace
+        continue-on-error: true
+        run: ./gradlew :app:lintDebug --stacktrace --console=plain
 
       - name: Publish lint report
         if: always()
@@ -95,7 +114,23 @@ jobs:
         run: chmod +x gradlew
 
       - name: Assemble debug
-        run: ./gradlew :app:assembleDebug --stacktrace
+        run: |
+          set +e
+          ./gradlew :app:assembleDebug --stacktrace --console=plain 2>&1 | tee gradle-assemble.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            grep -nE "^e: |error:|FAILED|What went wrong|Caused by:|Unresolved reference" gradle-assemble.log \
+              | head -40 | while IFS= read -r line; do echo "::error title=Assemble::$line"; done
+            exit "$status"
+          fi
+
+      - name: Upload assemble log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-assemble-log
+          path: gradle-assemble.log
+          retention-days: 7
 
       - name: Rename APK
         run: |
