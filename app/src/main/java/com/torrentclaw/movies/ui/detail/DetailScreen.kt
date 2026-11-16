@@ -382,14 +382,15 @@ private fun DetailContent(
             // Stable keys: several anonymous releases share a null hash, which
             // would crash LazyColumn ("key was already used").
             items(uiState.releases, key = { release -> release.key }) { release ->
-                val liveProgress = release.infoHash
-                    ?.uppercase()
-                    ?.let { uiState.torrentProgress[it] }
+                val liveHash = release.infoHash?.uppercase()
+                val liveProgress = liveHash?.let { uiState.torrentProgress[it] }
+                val liveError = liveHash?.let { uiState.torrentErrors[it] }
                 ReleaseCard(
                     release = release,
                     isBest = release.key == uiState.bestRelease?.key,
                     highlightedQuality = null,
                     downloadProgress = liveProgress?.takeIf { it.hasMetadata || it.progress > 0f },
+                    downloadError = liveError,
                     onDownload = {
                         if (liveProgress == null) {
                             onDownloadMovie(release)

@@ -39,6 +39,8 @@ data class DetailUiState(
     val isRefreshing: Boolean = false,
     /** Live engine state keyed by upper-case info hash. */
     val torrentProgress: Map<String, TorrentProgress> = emptyMap(),
+    /** Engine failures keyed by upper-case info hash (dead swarm, blocked P2P). */
+    val torrentErrors: Map<String, String> = emptyMap(),
     /** True when the API is withholding hashes because no key is configured. */
     val needsApiKey: Boolean = false,
 ) {
@@ -118,6 +120,13 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             torrentEngine.progress.collect { snapshot ->
                 _uiState.update { it.copy(torrentProgress = snapshot) }
+            }
+        }
+        // Without this, a dead swarm or blocked BitTorrent traffic looks exactly
+        // like a download that is merely slow: 0 % forever.
+        viewModelScope.launch {
+            torrentEngine.errors.collect { errors ->
+                _uiState.update { it.copy(torrentErrors = errors) }
             }
         }
     }

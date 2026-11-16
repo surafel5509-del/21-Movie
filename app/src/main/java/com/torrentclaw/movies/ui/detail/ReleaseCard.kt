@@ -60,6 +60,8 @@ fun ReleaseCard(
     highlightedQuality: String? = null,
     /** Live engine state for this release, when it is already downloading. */
     downloadProgress: TorrentProgress? = null,
+    /** Why the engine gave up on this release (dead swarm, blocked P2P). */
+    downloadError: String? = null,
 ) {
     val extended = MaterialTheme.extendedColors
     val healthColor = when (release.health) {
@@ -192,6 +194,7 @@ fun ReleaseCard(
                     InlineDownloadProgress(
                         progress = downloadProgress,
                         onCancel = onDownload,
+                        error = downloadError,
                     )
                 }
                 !release.isDownloadable -> {
@@ -367,12 +370,18 @@ fun NoReleasesCard(
 private fun InlineDownloadProgress(
     progress: TorrentProgress,
     onCancel: () -> Unit,
+    error: String? = null,
 ) {
     val extended = MaterialTheme.extendedColors
+    val accent = if (error != null) {
+        MaterialTheme.colorScheme.error
+    } else {
+        extended.swarmStrong
+    }
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        border = BorderStroke(1.dp, extended.swarmStrong.copy(alpha = 0.5f)),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.5f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
@@ -385,7 +394,7 @@ private fun InlineDownloadProgress(
                     },
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
-                    color = extended.swarmStrong,
+                    color = accent,
                 )
                 Spacer(Modifier.weight(1f))
                 Text(
@@ -417,9 +426,19 @@ private fun InlineDownloadProgress(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(5.dp),
-                color = extended.swarmStrong,
+                color = accent,
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             )
+            if (error != null) {
+                Text(
+                    text = error,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
         }
     }
 }
