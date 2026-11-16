@@ -15,6 +15,7 @@ on:
     paths:
       - 'app/src/main/java/com/torrentclaw/movies/network/**'
       - '.github/workflows/api-check.yml'
+      - 'app/src/main/java/com/torrentclaw/movies/data/download/**'
 
 jobs:
   verify:
