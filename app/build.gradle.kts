@@ -170,10 +170,9 @@ dependencies {
     // Navigation + DI
     implementation(libs.androidx.navigation.compose)
 
-    // Player + background playback (picture-in-picture survives leaving the app)
+    // In-app video player (ExoPlayer surface + picture-in-picture)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
-    implementation(libs.media3.session)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

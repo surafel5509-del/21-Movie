@@ -98,6 +98,7 @@ fun PlayerScreen(
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
+    val pipNow = LocalPipState.current
     val player = session.player
 
     var isPlaying by remember { mutableStateOf(player.isPlaying) }
@@ -107,7 +108,7 @@ fun PlayerScreen(
     var controlsVisible by remember { mutableStateOf(true) }
     var isFullscreen by remember { mutableStateOf(false) }
     var resizeMode by remember { mutableStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
-    var inPip by remember { mutableStateOf(false) }
+    var inPip by remember { mutableStateOf(pipNow) }
     var isScrubbing by remember { mutableStateOf(false) }
     val latestPosition by rememberUpdatedState(positionMs)
     val latestDuration by rememberUpdatedState(durationMs)
@@ -178,19 +179,33 @@ fun PlayerScreen(
         onDispose { session.persist(latestPosition, latestDuration) }
     }
 
-    // Pause when the app is genuinely backgrounded without PiP: audio continuing
-    // from a video the user cannot see is a bug, not a feature. PiP is the
-    // sanctioned way to keep watching, and the media service keeps audio alive
-    // for the lock-screen controls.
+    /**
+     * Leaving the app.
+     *
+     * This is the whole picture-in-picture feature, so the ordering matters:
+     *
+     *  - Entering PiP fires `ON_PAUSE` *while the activity is already in PiP mode*,
+     *    so no pause happens and the movie keeps playing in the floating window.
+     *  - Leaving to another app normally fires `ON_PAUSE` without PiP, so playback
+     *    pauses — audio from an invisible movie would be a bug, not a feature.
+     *
+     * Both paths persist the position first, so returning to the app (or a process
+     * death while away) resumes at the same second.
+     */
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_STOP -> if (!inPip && !isInPip(activity)) {
-                    player.pause()
+                Lifecycle.Event.ON_PAUSE -> {
+                    inPip = isInPip(activity)
                     session.persist(latestPosition, latestDuration)
+                    if (!inPip) player.pause()
                 }
-                Lifecycle.Event.ON_START -> inPip = isInPip(activity)
+                Lifecycle.Event.ON_RESUME -> {
+                    inPip = isInPip(activity)
+                    // Coming back from PiP: restore the immersive layout.
+                    if (inPip) controlsVisible = false
+                }
                 else -> Unit
             }
         }
@@ -198,8 +213,14 @@ fun PlayerScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // In picture-in-picture there is no room for controls; the system draws its
+    // own minimal chrome.
+    LaunchedEffect(pipNow) {
+        if (pipNow) controlsVisible = false
+    }
+
     // Keep the screen awake while playing, and auto-hide the controls.
-    LaunchedEffect(isPlaying, controlsVisible) {
+    LaunchedEffect(isPlaying, controlsVisible, pipNow) {
         activity?.window?.let { window ->
             if (isPlaying) {
                 window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -207,7 +228,7 @@ fun PlayerScreen(
                 window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             }
         }
-        if (isPlaying && controlsVisible) {
+        if (isPlaying && controlsVisible && !pipNow) {
             delay(4_000)
             controlsVisible = false
         }
@@ -252,7 +273,7 @@ fun PlayerScreen(
 
         // ── controls overlay ────────────────────────────────────────────────
         AnimatedVisibility(
-            visible = controlsVisible,
+            visible = controlsVisible && !pipNow,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.fillMaxSize(),
@@ -508,27 +529,8 @@ fun enterPip(activity: Activity?, player: Player, session: PlayerUiSession): Boo
         } else {
             Rational(16, 9)
         }
-        val actions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Play/pause/fast-forward/rewind inside the PiP window.
-            // RemoteAction(icon, title, contentDescription, pendingIntent)
-            android.app.RemoteAction(
-                android.graphics.drawable.Icon.createWithResource(activity, android.R.drawable.ic_media_play),
-                "Play",
-                "Play or pause",
-                android.app.PendingIntent.getBroadcast(
-                    activity,
-                    0,
-                    android.content.Intent(PlayerPipReceiver.ACTION_TOGGLE),
-                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or
-                        android.app.PendingIntent.FLAG_IMMUTABLE,
-                ),
-            ).let { listOf(it) }
-        } else {
-            emptyList()
-        }
         val params = PictureInPictureParams.Builder()
             .setAspectRatio(ratio)
-            .apply { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) setActions(actions) }
             .build()
         activity.enterPictureInPictureMode(params)
     }.getOrDefault(false)

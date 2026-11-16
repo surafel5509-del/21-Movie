@@ -1,6 +1,5 @@
 package com.torrentclaw.movies.ui.player
 
-import android.content.ComponentName
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -9,13 +8,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
-import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.session.MediaController
-import androidx.media3.session.SessionToken
 import androidx.media3.ui.AspectRatioFrameLayout
-import com.google.common.util.concurrent.MoreExecutors
 import com.torrentclaw.movies.data.download.DownloadManager
 import com.torrentclaw.movies.data.local.DownloadEntity
 import com.torrentclaw.movies.data.local.DownloadKind
@@ -24,7 +19,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import android.content.Context
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,10 +46,11 @@ data class PlayerUiState(
  * changes, so rotating the phone or entering picture-in-picture does not create a
  * second player or restart the movie.
  *
- * The player is bound to [com.torrentclaw.movies.data.player.PlaybackService]
- * through a [MediaController] when possible, so the media notification and
- * lock-screen controls stay valid; it degrades to a local player if the session
- * cannot be reached.
+ * Playback is deliberately local to the app rather than delegated to a
+ * `MediaSessionService`: a Media3 controller cannot render video into a
+ * `PlayerView`, and connecting one runs a *second* ExoPlayer, which means double
+ * audio. The activity keeps this player alive while picture-in-picture is active,
+ * and the persisted position covers the case where Android kills the process.
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 @HiltViewModel
@@ -75,7 +70,6 @@ class PlayerViewModel @Inject constructor(
     var session: PlayerUiSession? by mutableStateOf(null)
         private set
 
-    private var controller: MediaController? = null
     private var persistJob: Job? = null
 
     init {
@@ -167,36 +161,10 @@ class PlayerViewModel @Inject constructor(
             resumedAtMs = startAt,
             durationMs = resume.durationMs,
         )
-
-        // Mirror the private player into the media session so the notification and
-        // lock-screen controls work. Best-effort: a failure must not stop playback.
-        connectSession(player)
-    }
-
-    private fun connectSession(player: Player) {
-        runCatching {
-            val token = SessionToken(
-                context,
-                ComponentName(context, com.torrentclaw.movies.data.player.PlaybackService::class.java),
-            )
-            val future = MediaController.Builder(context, token).buildAsync()
-            future.addListener(
-                {
-                    runCatching {
-                        controller = future.get()
-                        // Local playback stays authoritative; the controller exists
-                        // for the notification. Reflect state into it one way only.
-                        controller?.play()
-                    }
-                },
-                MoreExecutors.directExecutor(),
-            )
-        }
     }
 
     override fun onCleared() {
         persistJob?.cancel()
-        runCatching { controller?.release() }
         session?.release()
         session = null
         super.onCleared()

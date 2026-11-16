@@ -9,17 +9,38 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.torrentclaw.movies.ui.MainViewModel
 import com.torrentclaw.movies.ui.navigation.TorrentClawNavGraph
+import com.torrentclaw.movies.ui.player.LocalPipState
 import com.torrentclaw.movies.ui.theme.TorrentClawTheme
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    /**
+     * True while the activity is in picture-in-picture.
+     *
+     * Compose cannot observe this: `onPictureInPictureModeChanged` is an Activity
+     * callback, so it is mirrored into a Compose state here and handed to the
+     * player through [LocalPipState]. The player uses it to hide its controls —
+     * a floating window is far too small for a scrubber.
+     */
+    private val pipState = mutableStateOf(false)
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: android.content.res.Configuration,
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        pipState.value = isInPictureInPictureMode
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Must run before super.onCreate so the splash hand-off is seamless.
@@ -49,7 +70,9 @@ class MainActivity : ComponentActivity() {
                 dynamicColor = uiState.dynamicColor,
             ) {
                 Surface(color = MaterialTheme.colorScheme.background) {
-                    TorrentClawNavGraph()
+                    CompositionLocalProvider(LocalPipState provides pipState.value) {
+                        TorrentClawNavGraph()
+                    }
                 }
             }
         }
