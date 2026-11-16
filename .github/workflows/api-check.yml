@@ -70,11 +70,20 @@ jobs:
           HASHES=$(grep -o infoHash $BODY 2>/dev/null | wc -l)
           MAGNETS=$(grep -o magnetUrl $BODY 2>/dev/null | wc -l)
 
-          ANON_CODE=$(curl -sS -o /dev/null -w '%{http_code}' -H 'Accept: application/json' \
-            'https://torrentclaw.com/api/v1/search?q=dune&type=movie&limit=1')
-          UA_CODE=$(curl -sS -o /dev/null -w '%{http_code}' \
-            -A 'TorrentClawMovies/1.2.0 (Android)' -H 'Accept: application/json' \
-            'https://torrentclaw.com/api/v1/search?q=dune&type=movie&limit=1')
+          # What exactly triggers the block? Plain curl is rejected while a
+          # browser-looking agent is accepted, so the app's own User-Agent matters.
+          probe() {
+            curl -sS -o /dev/null -w '%{http_code}' "$@" \
+              'https://torrentclaw.com/api/v1/search?q=dune&type=movie&limit=1'
+          }
+          P_PLAIN=$(probe)
+          P_BROWSER=$(probe -A 'Mozilla/5.0')
+          P_PREFIX=$(probe -A 'TorrentClawMovies/1.2.0')
+          P_FULL=$(probe -A 'TorrentClawMovies/1.2.0 (Android)')
+          P_KEYED_BROWSER=$(probe -A 'Mozilla/5.0' -H 'Authorization: Bearer '$TC_KEY)
+          P_KEYED_APP=$(probe -A 'TorrentClawMovies/1.2.0 (Android)' -H 'Authorization: Bearer '$TC_KEY)
+
+          echo matrix plain:$P_PLAIN browser:$P_BROWSER prefix:$P_PREFIX full:$P_FULL keyedBrowser:$P_KEYED_BROWSER keyedApp:$P_KEYED_APP
 
           echo http:$CODE tier:${TIER:-none} hashes:$HASHES magnets:$MAGNETS anon:$ANON_CODE
 
@@ -82,8 +91,9 @@ jobs:
             echo '# Live API verification'
             echo
             echo '- Keyed request: HTTP '$CODE
-            echo '- Anonymous control request: HTTP '$ANON_CODE
-            echo '- Browser-UA request: HTTP '$UA_CODE
+            echo '- UA matrix (plain / Mozilla / app-prefix / app-full): '$P_PLAIN / $P_BROWSER / $P_PREFIX / $P_FULL
+            echo '- Keyed + Mozilla UA: '$P_KEYED_BROWSER
+            echo '- Keyed + app UA: '$P_KEYED_APP
             echo '- Rate-limit tier: '${TIER:-none}
             echo '- infoHash fields: '$HASHES
             echo '- magnetUrl fields: '$MAGNETS
