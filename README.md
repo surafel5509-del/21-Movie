@@ -35,6 +35,18 @@ your torrent client via a `FileProvider` handoff.
 
 ---
 
+## Get the APK
+
+| What | Where |
+| --- | --- |
+| **Signed-ish release APK** (recommended) | [Releases → v1.0.0](https://github.com/surafel5509-del/21-Movie/releases/latest) → `TorrentClawMovies-v1.0.0-release.apk` |
+| **Debug APK** (latest commit) | [Actions](../../actions) → newest green *Android CI* run → artifact `TorrentClawMovies-debug-apk` |
+
+Requirements: Android 8.0 (API 26) or newer. Enable "Install unknown apps" for
+your browser/file manager. The release APK is signed with the debug key unless
+you configure the `KEYSTORE_*` secrets, so it is meant for sideloading and
+testing, not for the Play Store.
+
 ## Screens
 
 | Home / Discovery | Search & filters | Detail & magnet | Watchlist |
