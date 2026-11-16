@@ -2,6 +2,7 @@ package com.torrentclaw.movies.data.prefs
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.Preferences.Key
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
@@ -54,7 +55,7 @@ class PreferencesRepository @Inject constructor(
 
     suspend fun setHapticFeedback(enabled: Boolean) = put(Keys.HAPTIC_FEEDBACK, enabled)
 
-    private suspend fun <T> put(key: Preferences.Key<T>, value: T) {
+    private suspend fun <T> put(key: Key<T>, value: T) {
         dataStore.edit { it[key] = value }
     }
 

@@ -8,6 +8,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
+import com.torrentclaw.movies.domain.model.Movie
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -40,7 +41,27 @@ data class CachedMovieEntity(
     @ColumnInfo(name = "best_quality") val bestQuality: String?,
     @ColumnInfo(name = "has_hdr") val hasHdr: Boolean,
     @ColumnInfo(name = "cached_at") val cachedAt: Long,
-)
+) {
+    fun toDomain(): Movie = Movie(
+        id = id,
+        title = title,
+        originalTitle = originalTitle,
+        overview = overview,
+        posterUrl = posterUrl,
+        backdropUrl = backdropUrl,
+        year = year,
+        ratingImdb = ratingImdb,
+        ratingTmdb = ratingTmdb,
+        genres = genres.split(WatchlistEntity.GENRE_DELIMITER).filter { it.isNotBlank() },
+        contentUrl = contentUrl,
+        imdbId = imdbId,
+        tmdbId = tmdbId,
+        maxSeeders = maxSeeders,
+        bestQuality = bestQuality,
+        hasHdr = hasHdr,
+        hasTorrents = true,
+    )
+}
 
 @Dao
 interface CachedMovieDao {

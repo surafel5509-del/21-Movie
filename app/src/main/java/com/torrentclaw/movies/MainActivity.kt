@@ -7,12 +7,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.torrentclaw.movies.ui.MainViewModel
-import com.torrentclaw.movies.ui.MainUiState
 import com.torrentclaw.movies.ui.navigation.TorrentClawNavGraph
 import com.torrentclaw.movies.ui.theme.TorrentClawTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -26,26 +24,20 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        var keepSplashVisible = true
-        splash.setKeepOnScreenCondition { keepSplashVisible }
-
         setContent {
             val viewModel: MainViewModel = hiltViewModel()
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-            keepSplashVisible = !uiState.isReady
+            // Hold the splash until the first DataStore emission so the app opens
+            // straight into the correct theme instead of flashing the default one.
+            splash.setKeepOnScreenCondition { !uiState.isReady }
 
             TorrentClawTheme(
                 themeMode = uiState.themeMode,
                 dynamicColor = uiState.dynamicColor,
             ) {
-                Surface(
-                    modifier = Modifier,
-                    color = MaterialTheme.colorScheme.background,
-                ) {
-                    if (uiState.isReady) {
-                        TorrentClawNavGraph()
-                    }
+                Surface(color = MaterialTheme.colorScheme.background) {
+                    TorrentClawNavGraph()
                 }
             }
         }

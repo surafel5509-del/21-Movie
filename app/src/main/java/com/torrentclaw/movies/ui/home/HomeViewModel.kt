@@ -33,7 +33,6 @@ data class HomeUiState(
     val preferredQuality: QualityFilter = QualityFilter.ALL,
     val errorMessage: String? = null,
     val isOfflineNotice: Boolean = false,
-    val isContentVisible: Boolean = false,
 )
 
 sealed interface HomeEvent {
@@ -113,7 +112,6 @@ class HomeViewModel @Inject constructor(
                 // Cached data + a failed refresh → non-blocking notice instead of an error screen.
                 errorMessage = error?.message?.takeIf { popular.isEmpty() && recent.isEmpty() },
                 isOfflineNotice = error != null && (popular.isNotEmpty() || recent.isNotEmpty()),
-                isContentVisible = popular.isNotEmpty() || recent.isNotEmpty(),
             )
 
             if (error != null && (popular.isNotEmpty() || recent.isNotEmpty())) {
@@ -121,8 +119,6 @@ class HomeViewModel @Inject constructor(
             }
         }
     }
-
-    fun onFeaturedClicked(): Movie? = _uiState.value.featured
 
     fun consumeEvent() {
         _events.value = null

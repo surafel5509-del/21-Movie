@@ -31,18 +31,18 @@ sealed interface ApiResult<out T> {
     fun getOrNull(): T? = (this as? Success)?.data
 
     /** Transforms a success payload and passes errors through untouched. */
-    inline fun <R> map(transform: (T) -> R): ApiResult<R> = when (this) {
+    fun <R> map(transform: (T) -> R): ApiResult<R> = when (this) {
         is Success -> Success(transform(data))
         is Error -> this
     }
 
     /** Runs [action] for a success payload; returns the receiver for chaining. */
-    inline fun onSuccess(action: (T) -> Unit): ApiResult<T> {
+    fun onSuccess(action: (T) -> Unit): ApiResult<T> {
         if (this is Success) action(data)
         return this
     }
 
-    inline fun onError(action: (Error) -> Unit): ApiResult<T> {
+    fun onError(action: (Error) -> Unit): ApiResult<T> {
         if (this is Error) action(this)
         return this
     }
@@ -64,7 +64,7 @@ sealed interface ApiResult<out T> {
          * Runs [block] and converts any failure into an [Error]. Coroutine
          * cancellation is rethrown so structured concurrency keeps working.
          */
-        inline fun <T> safeCall(block: () -> T): ApiResult<T> = try {
+        fun <T> safeCall(block: () -> T): ApiResult<T> = try {
             Success(block())
         } catch (e: CancellationException) {
             throw e
@@ -80,8 +80,8 @@ suspend fun <T> safeApiCall(call: suspend () -> retrofit2.Response<T>): ApiResul
         val response = call()
         val body = response.body()
         when {
-            response.isSuccessful && body != null -> ApiResult.Success(body)
-            response.isSuccessful && body == null -> ApiResult.Error(
+            response.isSuccessful() && body != null -> ApiResult.Success(body)
+            response.isSuccessful() && body == null -> ApiResult.Error(
                 type = ApiResult.ErrorType.PARSE,
                 message = "The server returned an empty response.",
             )

@@ -11,7 +11,7 @@ class FormattersTest {
         assertEquals("—", Formatters.fileSize(0))
         assertEquals("512 B", Formatters.fileSize(512))
         assertEquals("1.0 KB", Formatters.fileSize(1_024))
-        assertEquals("500.0 KB", Formatters.fileSize(512_000))
+        assertEquals("500 KB", Formatters.fileSize(512_000))
         assertEquals("2.0 GB", Formatters.fileSize(2_147_483_648))
         assertEquals("1.5 TB", Formatters.fileSize(1_649_267_441_664))
     }

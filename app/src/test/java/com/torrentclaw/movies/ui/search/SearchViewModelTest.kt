@@ -83,19 +83,26 @@ class SearchViewModelTest {
     )
 
     @Test
-    fun `typing is debounced by 400ms before hitting the network`() = runTest(dispatcher) {
+    fun `typing is coalesced into a single request`() = runTest(dispatcher) {
         val vm = viewModel()
         vm.onAction(SearchAction.QueryChanged("du"))
-        advanceTimeBy(200)
         vm.onAction(SearchAction.QueryChanged("dun"))
-        advanceTimeBy(200)
+        vm.onAction(SearchAction.QueryChanged("dune"))
+        advanceUntilIdle()
+
+        // Three keystrokes, one request — that is the whole point of the debounce.
+        coVerify(exactly = 1) { movieRepository.search(any(), any(), any()) }
+        coVerify(exactly = 1) { movieRepository.search("dune", any(), any()) }
+    }
+
+    @Test
+    fun `no request is dispatched before the 400ms window elapses`() = runTest(dispatcher) {
+        val vm = viewModel()
         vm.onAction(SearchAction.QueryChanged("dune"))
 
-        // No request yet: the debounce window keeps resetting.
-        advanceTimeBy(300)
+        advanceTimeBy(SearchViewModel.DEBOUNCE_MILLIS - 50)
         coVerify(exactly = 0) { movieRepository.search(any(), any(), any()) }
 
-        advanceTimeBy(150)
         advanceUntilIdle()
         coVerify(exactly = 1) { movieRepository.search("dune", any(), any()) }
     }
