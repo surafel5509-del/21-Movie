@@ -18,7 +18,6 @@ import com.torrentclaw.movies.data.player.PlaybackRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import android.content.Context
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -70,7 +69,6 @@ class PlayerViewModel @Inject constructor(
     var session: PlayerUiSession? by mutableStateOf(null)
         private set
 
-    private var persistJob: Job? = null
 
     init {
         resolve()
@@ -164,7 +162,6 @@ class PlayerViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        persistJob?.cancel()
         session?.release()
         session = null
         super.onCleared()

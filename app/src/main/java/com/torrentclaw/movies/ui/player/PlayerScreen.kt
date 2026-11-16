@@ -252,7 +252,6 @@ fun PlayerScreen(
                     setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                     this.player = player
                     resizeMode = session.initialResizeMode
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                 }
             },
             update = { view ->
@@ -598,8 +597,6 @@ class PlayerUiSession(
                 .setUri(java.io.File(filePath).toURI().toString())
                 .build()
 
-        /** ExoPlayer needs these; kept here so the ViewModel and screen agree. */
-        const val BUFFER_MS = 30_000
     }
 }
 
