@@ -52,57 +52,62 @@ jobs:
         env:
           KEY: ${{ steps.key.outputs.key }}
         run: |
-          set -euo pipefail
+          # Deliberately NOT using `set -e`: a failing grep must be reported, not
+          # abort the script (the first version of this job died silently that way).
+          set -uo pipefail
           BODY=$(mktemp)
           HEADERS=$(mktemp)
+
           CODE=$(curl -sS -o "$BODY" -D "$HEADERS" -w '%{http_code}' \
             -H "Authorization: Bearer $KEY" \
             -H "Accept: application/json" \
             -H "X-Search-Source: android" \
             "https://torrentclaw.com/api/v1/search?q=inception&type=movie&limit=1&quality=1080p")
-
           echo "HTTP $CODE"
-          TIER=$(grep -i '^x-ratelimit-tier:' "$HEADERS" | tr -d '\r' | awk '{print $2}')
-          REMAIN=$(grep -i '^x-ratelimit-remaining:' "$HEADERS" | tr -d '\r' | awk '{print $2}')
-          echo "Tier: ${TIER:-unknown}   Remaining: ${REMAIN:-unknown}"
+
+          TIER=$(grep -i '^x-ratelimit-tier:' "$HEADERS" 2>/dev/null | tr -d '\r' | awk '{print $2}')
+          REMAIN=$(grep -i '^x-ratelimit-remaining:' "$HEADERS" 2>/dev/null | tr -d '\r' | awk '{print $2}')
+          HASHES=$(grep -o '\"infoHash\"' "$BODY" 2>/dev/null | wc -l | tr -d ' ')
+          MAGNETS=$(grep -o '\"magnetUrl\"' "$BODY" 2>/dev/null | wc -l | tr -d ' ')
+          FILES=$(grep -o '\"torrentUrl\"' "$BODY" 2>/dev/null | wc -l | tr -d ' ')
+          NOTICE=$(grep -o '\"_notice\":\"[^\"]*\"' "$BODY" 2>/dev/null | head -1)
+
+          echo "tier=${TIER:-none} remaining=${REMAIN:-none}"
+          echo "infoHash=$HASHES magnetUrl=$MAGNETS torrentUrl=$FILES"
+          echo "notice=${NOTICE:-none}"
+          echo "--- first 240 chars of the response ---"
+          head -c 240 "$BODY"; echo
+
+          # Annotations are the only output reliably readable from the API, so the
+          # verdict goes there as well as to the log.
+          echo "::notice::tier=${TIER:-none} infoHash=$HASHES magnetUrl=$MAGNETS torrentUrl=$FILES notice=${NOTICE:-none}"
 
           if [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then
-            echo "::error::The API key was rejected (HTTP $CODE). Downloads cannot work."
-            head -c 400 "$BODY"; exit 1
+            echo "::error::The API key was rejected (HTTP $CODE). No download can work."
+            exit 1
           fi
-
-          # The two fields the magnet/download path needs.
-          HASHES=$(grep -o '\"infoHash\"' "$BODY" | wc -l | tr -d ' ')
-          MAGNETS=$(grep -o '\"magnetUrl\"' "$BODY" | wc -l | tr -d ' ')
-          FILES=$(grep -o '\"torrentUrl\"' "$BODY" | wc -l | tr -d ' ')
-          NOTICE=$(grep -o '\"_notice\":\"[^\"]*\"' "$BODY" | head -1 || true)
-          echo "infoHash fields: $HASHES, magnetUrl fields: $MAGNETS, torrentUrl fields: $FILES"
-          # Surface the result in the annotations, because step logs are not always
-          # retrievable and a silent failure here is useless.
-          echo "::notice::tier=${TIER:-unknown} hashes=$HASHES magnets=$MAGNETS files=$FILES notice=$NOTICE"
-          echo "ANON_BODY=$(head -c 300 "$BODY" | tr -d '\n' | sed 's/%/%25/g')" >> "$GITHUB_ENV"
-
           if [ "$HASHES" -eq 0 ]; then
-            echo "::error::Authenticated search returned no infoHash (tier=${TIER:-unknown}, notice=${NOTICE:-none}). The key does not unlock magnets, so downloads would be locked."
-            echo "First 300 chars of the response:"; head -c 300 "$BODY"; echo
+            echo "::error::No infoHash in an authenticated response (tier=${TIER:-none}). Magnets stay locked, so downloads would not work. notice=${NOTICE:-none}"
             exit 1
           fi
 
-          # A real btih inside a magnet proves the payload is usable end to end.
-          grep -o 'magnet:?xt=urn:btih:[a-fA-F0-9]\{40\}' "$BODY" | head -3 || true
-          echo "::notice::Key tier=${TIER:-unknown}; magnets present — the download path has valid input."
+          grep -o 'magnet:?xt=urn:btih:[a-fA-F0-9]\{40\}' "$BODY" 2>/dev/null | head -3
+          echo "::notice::PASS - the key unlocks magnets; the download path has valid input."
 
       - name: Check the keyless tier still degrades cleanly
         env:
           KEY: ${{ steps.key.outputs.key }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           # Anonymous must keep working (30 req/min) for browsing without a key.
           BODY=$(mktemp)
           CODE=$(curl -sS -o "$BODY" -w '%{http_code}' \
             -H "Accept: application/json" \
             "https://torrentclaw.com/api/v1/search?q=dune&type=movie&limit=1")
           echo "Anonymous HTTP $CODE"
-          grep -o '"_notice":"[^"]*"' "$BODY" | head -1 || echo "no notice"
-          grep -q '"results"' "$BODY" || { echo "::error::Anonymous search returned no results array"; exit 1; }
+          grep -o '"_notice":"[^"]*"' "$BODY" 2>/dev/null | head -1 || echo "no notice"
+          if ! grep -q '"results"' "$BODY" 2>/dev/null; then
+            echo "::error::Anonymous search returned no results array"
+            exit 1
+          fi
           echo "::notice::Anonymous tier still serves metadata."
