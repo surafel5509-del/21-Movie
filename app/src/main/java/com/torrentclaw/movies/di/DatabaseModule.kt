@@ -7,6 +7,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
 import com.torrentclaw.movies.data.local.CachedMovieDao
 import com.torrentclaw.movies.data.local.DownloadDao
+import com.torrentclaw.movies.data.local.PlaybackDao
 import com.torrentclaw.movies.data.local.TorrentClawDatabase
 import com.torrentclaw.movies.data.local.WatchlistDao
 import dagger.Module
@@ -48,6 +49,10 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideDownloadDao(database: TorrentClawDatabase): DownloadDao = database.downloadDao()
+
+    @Provides
+    @Singleton
+    fun providePlaybackDao(database: TorrentClawDatabase): PlaybackDao = database.playbackDao()
 
     @Provides
     @Singleton
