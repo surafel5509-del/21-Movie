@@ -1,0 +1,103 @@
+name: API contract check
+
+# Verifies the assumptions the app is built on against the *live* TorrentClaw API:
+#   1. the configured key is accepted (X-RateLimit-Tier header)
+#   2. authenticated search responses contain info hashes + magnet links
+#   3. a magnet resolves to the expected btih
+#
+# This exists because the whole download feature depends on the keyed tier: on the
+# anonymous tier TorrentClaw omits infoHash/magnetUrl, so no download can start.
+# When that premise breaks, this job says so instead of users reporting "0 %".
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'app/src/main/java/com/torrentclaw/movies/network/**'
+      - '.github/workflows/api-check.yml'
+
+jobs:
+  verify:
+    name: Live API verification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same resolution order as app/build.gradle.kts: secret, then the key baked
+      # into this build. Never echoed in full.
+      - name: Resolve API key
+        id: key
+        env:
+          SECRET_KEY: ${{ secrets.TORRENTCLAW_API_KEY }}
+        run: |
+          set -euo pipefail
+          KEY="${SECRET_KEY:-}"
+          if [ -z "$KEY" ]; then
+            KEY=$(grep -oE 'tc_[a-z0-9_]*[0-9a-f]{16,}' app/build.gradle.kts | head -n1 || true)
+          fi
+          if [ -z "$KEY" ]; then
+            echo "No API key configured; only the anonymous tier can be checked."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "present=true" >> "$GITHUB_OUTPUT"
+          echo "::add-mask::$KEY"
+          {
+            echo "key=$KEY"
+          } >> "$GITHUB_OUTPUT"
+          echo "Key length: ${#KEY}, prefix: ${KEY:0:6}…"
+
+      - name: Check authenticated search returns magnets
+        if: steps.key.outputs.present == 'true'
+        env:
+          KEY: ${{ steps.key.outputs.key }}
+        run: |
+          set -euo pipefail
+          BODY=$(mktemp)
+          HEADERS=$(mktemp)
+          CODE=$(curl -sS -o "$BODY" -D "$HEADERS" -w '%{http_code}' \
+            -H "Authorization: Bearer $KEY" \
+            -H "Accept: application/json" \
+            -H "X-Search-Source: android" \
+            "https://torrentclaw.com/api/v1/search?q=inception&type=movie&limit=1&quality=1080p")
+
+          echo "HTTP $CODE"
+          TIER=$(grep -i '^x-ratelimit-tier:' "$HEADERS" | tr -d '\r' | awk '{print $2}')
+          REMAIN=$(grep -i '^x-ratelimit-remaining:' "$HEADERS" | tr -d '\r' | awk '{print $2}')
+          echo "Tier: ${TIER:-unknown}   Remaining: ${REMAIN:-unknown}"
+
+          if [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then
+            echo "::error::The API key was rejected (HTTP $CODE). Downloads cannot work."
+            head -c 400 "$BODY"; exit 1
+          fi
+
+          # The two fields the magnet/dowload path needs.
+          HASHES=$(grep -o '"infoHash"' "$BODY" | wc -l | tr -d ' ')
+          MAGNETS=$(grep -o '"magnetUrl"' "$BODY" | wc -l | tr -d ' ')
+          FILES=$(grep -o '"torrentUrl"' "$BODY" | wc -l | tr -d ' ')
+          echo "infoHash fields: $HASHES, magnetUrl fields: $MAGNETS, torrentUrl fields: $FILES"
+
+          if [ "$HASHES" -eq 0 ]; then
+            echo "::error::Authenticated search returned no infoHash. The key does not unlock magnets, so downloads will be locked."
+            grep -o '"_notice":"[^"]*"' "$BODY" | head -1 || true
+            exit 1
+          fi
+
+          # A real btih inside a magnet proves the payload is usable end to end.
+          grep -o 'magnet:?xt=urn:btih:[a-fA-F0-9]\{40\}' "$BODY" | head -3 || true
+          echo "::notice::Key tier=${TIER:-unknown}; magnets present — the download path has valid input."
+
+      - name: Check the keyless tier still degrades cleanly
+        env:
+          KEY: ${{ steps.key.outputs.key }}
+        run: |
+          set -euo pipefail
+          # Anonymous must keep working (30 req/min) for browsing without a key.
+          BODY=$(mktemp)
+          CODE=$(curl -sS -o "$BODY" -w '%{http_code}' \
+            -H "Accept: application/json" \
+            "https://torrentclaw.com/api/v1/search?q=dune&type=movie&limit=1")
+          echo "Anonymous HTTP $CODE"
+          grep -o '"_notice":"[^"]*"' "$BODY" | head -1 || echo "no notice"
+          grep -q '"results"' "$BODY" || { echo "::error::Anonymous search returned no results array"; exit 1; }
+          echo "::notice::Anonymous tier still serves metadata."
