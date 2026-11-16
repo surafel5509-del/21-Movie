@@ -53,8 +53,10 @@ jobs:
       - name: Check authenticated search returns magnets
         if: steps.key.outputs.present == 'true'
         env:
-          KEY: ${{ steps.key.outputs.key }}
+          TC_KEY: ${{ steps.key.outputs.key }}
         run: |
+          echo "key length: ${#TC_KEY}"
+          KEY="$TC_KEY"
           # Deliberately NOT using `set -e`: a failing grep must be reported, not
           # abort the script (the first version of this job died silently that way).
           set -uo pipefail
@@ -90,6 +92,8 @@ jobs:
           {
             echo "# Live API verification"
             echo
+            echo "- Key length seen by this step: ${#KEY}"
+            echo
             echo "- HTTP status: \`$CODE\`"
             echo "- Rate-limit tier: \`${TIER:-none}\`"
             echo "- Remaining this window: \`${REMAIN:-none}\`"
@@ -119,8 +123,6 @@ jobs:
           echo "::notice::PASS - the key unlocks magnets; the download path has valid input."
 
       - name: Check the keyless tier still degrades cleanly
-        env:
-          KEY: ${{ steps.key.outputs.key }}
         run: |
           set -uo pipefail
           # Anonymous must keep working (30 req/min) for browsing without a key.
