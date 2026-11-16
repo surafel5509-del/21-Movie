@@ -95,7 +95,9 @@ fun RecentItemDto.toMovie(): Movie = Movie(
  * up, sorted and ranked, with download actions disabled until a key is added.
  */
 fun TorrentDto.toRelease(magnetResolver: MagnetResolver, movieTitle: String): TorrentRelease {
-    val hash = infoHash.trim().ifBlank { null }
+    // btih hex is conventionally lower-case; normalising keeps de-duplication,
+    // the synthesised .torrent URL and Room keys consistent.
+    val hash = infoHash.trim().ifBlank { null }?.lowercase()
     val magnet = magnetResolver.resolve(
         magnetUrl = magnetUrl,
         infoHash = infoHash,
@@ -132,7 +134,19 @@ fun TorrentDto.toRelease(magnetResolver: MagnetResolver, movieTitle: String): To
 fun SearchResultDto.toMovieDetail(magnetResolver: MagnetResolver): MovieDetail {
     val releases = torrents
         .map { it.toRelease(magnetResolver, movieTitle = title) }
-        .distinctBy { it.infoHash?.lowercase() ?: it.title.orEmpty().lowercase() }
+        // Dedupe on the info hash when present; otherwise on everything that
+        // makes a release row distinct. Identical anonymous duplicates are noise
+        // and would collide as LazyColumn keys.
+        .distinctBy { release ->
+            release.infoHash?.lowercase() ?: listOf(
+                release.title,
+                release.quality,
+                release.sizeBytes,
+                release.seeders,
+                release.leechers,
+                release.releaseGroup,
+            ).joinToString("|")
+        }
         .sortedByDescending { it.seeders }
     return MovieDetail(movie = toMovie(), releases = releases)
 }

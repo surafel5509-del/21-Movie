@@ -121,10 +121,13 @@ class DtoMappersTest {
     @Test
     fun `releases without hash or magnet are kept but not downloadable`() {
         val dto = json.decodeFromString<SearchResponseDto>(searchJson).results.first()
+        val base = dto.torrents.first().copy(infoHash = "", magnetUrl = null)
         val anonymous = dto.copy(
+            // Two *distinct* anonymous releases (different size/seeders); byte-
+            // identical duplicates are legitimately collapsed by the mapper.
             torrents = listOf(
-                dto.torrents.first().copy(infoHash = "", magnetUrl = null),
-                dto.torrents.first().copy(infoHash = "", magnetUrl = "not-a-magnet"),
+                base,
+                base.copy(magnetUrl = "not-a-magnet", seeders = 42, sizeBytes = "2048"),
             ),
         )
         val detail = anonymous.toMovieDetail(resolver)
@@ -134,7 +137,6 @@ class DtoMappersTest {
             assertNull(release.infoHash)
             assertNull(release.playableMagnet)
             assertFalse(release.isDownloadable)
-            assertEquals(0, release.seeders.coerceAtLeast(0))
         }
         // Distinct keys, or the LazyColumn would crash on duplicate null keys.
         assertEquals(2, detail.releases.map { it.key }.distinct().size)

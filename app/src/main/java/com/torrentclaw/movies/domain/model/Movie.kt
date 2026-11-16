@@ -100,12 +100,25 @@ data class TorrentRelease(
         }
 
     /**
-     * Stable identity for this release. The info hash when TorrentClaw exposes
-     * one (authenticated), otherwise the release title — which is unique enough
-     * within a single movie's release list.
+     * Stable identity for this release, safe to use as a LazyColumn key.
+     *
+     * The info hash is ideal when TorrentClaw exposes one. On the anonymous tier
+     * several releases can share a `rawTitle` (or have none at all), so the
+     * fallback folds in size, seeders, quality and group — fields that differ
+     * between distinct release rows. Keying on the title alone crashed
+     * `LazyColumn` with duplicate keys.
      */
     val key: String
-        get() = infoHash?.uppercase() ?: "title:" + title.orEmpty().hashCode().toUInt().toString(16)
+        get() = infoHash?.lowercase() ?: buildString {
+            append("t:")
+            append(title.orEmpty())
+            append('|').append(quality.orEmpty())
+            append('|').append(sizeBytes ?: 0L)
+            append('|').append(seeders)
+            append('|').append(leechers)
+            append('|').append(releaseGroup.orEmpty())
+            append('|').append(tracker.orEmpty())
+        }.hashCode().toUInt().toString(16).let { "local-" + it }
 
     /** Raw `.torrent` bytes, populated by the repository when it prefetches one. */
     var torrentBytes: ByteArray? = null

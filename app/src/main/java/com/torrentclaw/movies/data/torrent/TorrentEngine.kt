@@ -150,7 +150,8 @@ class TorrentEngine @Inject constructor() {
      */
     fun addTorrent(release: TorrentRelease, downloadDir: File) = onEngine {
         val session = manager ?: return@onEngine
-        val hash = release.key
+        // Same canonical form the alerts and progress map use (upper-case hex).
+        val hash = release.key.uppercase()
         runCatching { downloadDir.mkdirs() }
 
         // Local vals: `torrentBytes` is mutable and `playableMagnet` is a custom
