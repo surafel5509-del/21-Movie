@@ -70,12 +70,16 @@ jobs:
           HASHES=$(grep -o infoHash $BODY 2>/dev/null | wc -l)
           MAGNETS=$(grep -o magnetUrl $BODY 2>/dev/null | wc -l)
 
-          echo http:$CODE tier:${TIER:-none} hashes:$HASHES magnets:$MAGNETS
+          ANON_CODE=$(curl -sS -o /dev/null -w '%{http_code}' -H 'Accept: application/json' \
+            'https://torrentclaw.com/api/v1/search?q=dune&type=movie&limit=1')
+
+          echo http:$CODE tier:${TIER:-none} hashes:$HASHES magnets:$MAGNETS anon:$ANON_CODE
 
           {
             echo '# Live API verification'
             echo
-            echo '- HTTP status: '$CODE
+            echo '- Keyed request: HTTP '$CODE
+            echo '- Anonymous control request: HTTP '$ANON_CODE
             echo '- Rate-limit tier: '${TIER:-none}
             echo '- infoHash fields: '$HASHES
             echo '- magnetUrl fields: '$MAGNETS
