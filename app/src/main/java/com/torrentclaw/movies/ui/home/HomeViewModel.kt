@@ -2,6 +2,9 @@ package com.torrentclaw.movies.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.torrentclaw.movies.data.download.DownloadManager
+import com.torrentclaw.movies.data.local.PlaybackPositionEntity
+import com.torrentclaw.movies.data.player.PlaybackRepository
 import com.torrentclaw.movies.data.prefs.PreferencesRepository
 import com.torrentclaw.movies.data.repository.MovieRepository
 import com.torrentclaw.movies.data.repository.WatchlistRepository
@@ -33,6 +36,8 @@ data class HomeUiState(
     val preferredQuality: QualityFilter = QualityFilter.ALL,
     val errorMessage: String? = null,
     val isOfflineNotice: Boolean = false,
+    /** Downloads the user has started watching, most recent first. */
+    val continueWatching: List<PlaybackPositionEntity> = emptyList(),
 )
 
 sealed interface HomeEvent {
@@ -44,6 +49,8 @@ class HomeViewModel @Inject constructor(
     private val movieRepository: MovieRepository,
     private val watchlistRepository: WatchlistRepository,
     preferencesRepository: PreferencesRepository,
+    playbackRepository: PlaybackRepository,
+    private val downloadManager: DownloadManager,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -73,7 +80,31 @@ class HomeViewModel @Inject constructor(
                     )
                 }
         }
+        // "Continue watching": a row that appears only once something is actually
+        // part-watched, so a fresh install looks clean.
+        viewModelScope.launch {
+            playbackRepository.continueWatching.collect { positions ->
+                _uiState.value = _uiState.value.copy(continueWatching = positions)
+            }
+        }
         load(forceRefresh = false)
+    }
+
+    /**
+     * Opens a resume card: resolves the queue row off the main thread, then reports
+     * the id the player route needs.
+     */
+    fun playResume(entry: PlaybackPositionEntity, onReady: (String) -> Unit) {
+        viewModelScope.launch {
+            val id = downloadManager.downloadIdForFile(entry.filePath)
+            if (id != null) {
+                onReady(id)
+            } else {
+                _events.value = HomeEvent.ShowMessage(
+                    "This file is no longer in your downloads.",
+                )
+            }
+        }
     }
 
     /** Pull-to-refresh entry point. */

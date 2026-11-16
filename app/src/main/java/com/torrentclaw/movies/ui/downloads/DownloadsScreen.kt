@@ -74,6 +74,7 @@ import androidx.compose.ui.res.stringResource
 fun DownloadsScreen(
     modifier: Modifier = Modifier,
     viewModel: DownloadsViewModel = hiltViewModel(),
+    onPlay: (String) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
@@ -160,6 +161,7 @@ fun DownloadsScreen(
                     items(uiState.completed, key = { it.id }) { entity ->
                         FinishedDownloadCard(
                             entity = entity,
+                            onPlay = { onPlay(entity.id) },
                             onOpen = { viewModel.open(entity) },
                             onRemove = { viewModel.remove(entity) },
                         )
@@ -300,6 +302,7 @@ private fun ActiveDownloadCard(
 @Composable
 private fun FinishedDownloadCard(
     entity: DownloadEntity,
+    onPlay: () -> Unit,
     onOpen: () -> Unit,
     onRemove: () -> Unit,
 ) {
@@ -339,15 +342,49 @@ private fun FinishedDownloadCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            // Finished movies play in a video player; finished .torrent files open
-            // in the user's torrent client.
-            if (entity.kind == DownloadKind.TORRENT_FILE.name || entity.kind == DownloadKind.TORRENT.name) {
-                IconButton(onClick = onOpen) {
-                    Icon(
-                        if (entity.kind == DownloadKind.TORRENT.name) Icons.Rounded.PlayArrow else Icons.Rounded.OpenInNew,
-                        contentDescription = stringResource(R.string.download_open),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
+            // An in-app player is the primary action for a downloaded movie: tap
+            // play and the film opens without leaving the app. `.torrent` files
+            // still go to the user's torrent client, which is their only use.
+            when (entity.kind) {
+                DownloadKind.TORRENT.name -> {
+                    androidx.compose.material3.FilledTonalIconButton(
+                        onClick = onPlay,
+                        modifier = Modifier.size(40.dp),
+                    ) {
+                        Icon(
+                            Icons.Rounded.PlayArrow,
+                            contentDescription = "Play",
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    IconButton(onClick = onOpen) {
+                        Icon(
+                            Icons.Rounded.FolderOpen,
+                            contentDescription = "Open in another app",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                DownloadKind.MEDIA.name -> {
+                    androidx.compose.material3.FilledTonalIconButton(
+                        onClick = onPlay,
+                        modifier = Modifier.size(40.dp),
+                    ) {
+                        Icon(
+                            Icons.Rounded.PlayArrow,
+                            contentDescription = "Play",
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+                else -> {
+                    IconButton(onClick = onOpen) {
+                        Icon(
+                            Icons.Rounded.OpenInNew,
+                            contentDescription = stringResource(R.string.download_open),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
             }
             IconButton(onClick = onRemove) {

@@ -30,7 +30,11 @@ val torrentClawApiKey: String = run {
     fromLocal
         ?: (project.findProperty("torrentclaw.apiKey") as String?)
         ?: System.getenv("TORRENTCLAW_API_KEY")
-        ?: ""
+        // This build's owner supplied a PRO key so the shipped APK works out of
+        // the box (the anonymous tier returns no magnets, so downloads cannot
+        // work). It can still be overridden per-install in Settings, and CI
+        // overrides it with the TORRENTCLAW_API_KEY secret when one is set.
+        ?: "tc_fb85ffdf5e5b97d47afe38a24a1c29c9a73832fc6e7db757"
 }
 
 /**
@@ -68,8 +72,8 @@ android {
         applicationId = "com.torrentclaw.movies"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -165,6 +169,11 @@ dependencies {
 
     // Navigation + DI
     implementation(libs.androidx.navigation.compose)
+
+    // Player + background playback (picture-in-picture survives leaving the app)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.ui)
+    implementation(libs.media3.session)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

@@ -49,6 +49,11 @@ import com.torrentclaw.movies.ui.components.MovieCard
 import com.torrentclaw.movies.ui.components.PosterGridSkeleton
 import androidx.compose.ui.res.stringResource
 import com.torrentclaw.movies.R
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
+import coil.compose.AsyncImage
 
 /**
  * Home / Discovery: a featured hero banner for the #1 trending movie, then a
@@ -62,6 +67,7 @@ fun HomeScreen(
     onMovieClick: (Int, String) -> Unit,
     onSearchClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onPlayClick: (String) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
@@ -189,6 +195,17 @@ private fun HomeContent(
             }
         }
 
+        // Continue watching: only rendered once something is part-watched, so a
+        // fresh install has no empty shelf.
+        if (uiState.continueWatching.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                ContinueWatchingRow(
+                    entries = uiState.continueWatching,
+                    onPlay = { entry -> viewModel.playResume(entry, onPlayClick) },
+                )
+            }
+        }
+
         item(span = { GridItemSpan(maxLineSpan) }) {
             SectionHeader(
                 title = stringResource(
@@ -244,6 +261,101 @@ private fun HomeLoadingContent() {
         }
         Spacer(Modifier.height(14.dp))
         PosterGridSkeleton(rows = 2)
+    }
+}
+
+/**
+ * Resume shelf: horizontal cards with poster, title and a watched-progress ring.
+ * Tapping one reopens the in-app player at the saved second.
+ */
+@Composable
+private fun ContinueWatchingRow(
+    entries: List<com.torrentclaw.movies.data.local.PlaybackPositionEntity>,
+    onPlay: (com.torrentclaw.movies.data.local.PlaybackPositionEntity) -> Unit,
+) {
+    Column(modifier = Modifier.padding(top = 4.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Continue watching",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = "${entries.size}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        androidx.compose.foundation.lazy.LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(entries, key = { it.filePath }) { entry ->
+                val fraction = entry.watchedFraction ?: 0f
+                Column(
+                    modifier = Modifier
+                        .width(132.dp)
+                        .clip(com.torrentclaw.movies.ui.theme.CardShapes.poster)
+                        .clickable { onPlay(entry) },
+                ) {
+                    Box {
+                        AsyncImage(
+                            model = entry.posterUrl,
+                            contentDescription = entry.movieTitle,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(186.dp)
+                                .clip(com.torrentclaw.movies.ui.theme.CardShapes.poster),
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .align(Alignment.Center)
+                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                .background(Color.Black.copy(alpha = 0.55f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.PlayArrow,
+                                contentDescription = "Resume",
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                        // Watched bar pinned to the poster's bottom edge.
+                        LinearProgressIndicator(
+                            progress = { fraction },
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .height(3.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = Color.White.copy(alpha = 0.25f),
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = entry.movieTitle,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = "Resume",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        }
     }
 }
 

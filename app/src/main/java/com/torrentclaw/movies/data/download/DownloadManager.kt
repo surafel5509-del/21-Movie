@@ -610,6 +610,29 @@ class DownloadManager @Inject constructor(
         }
     }
 
+    /**
+     * Finds the queue row that produced [filePath]. Playback positions are keyed by
+     * file, but the player route is addressed by download id, so this is the bridge
+     * between a "Continue watching" card and a playable download.
+     *
+     * Matching is by containment because libtorrent writes into a folder named
+     * after the torrent, one level below the recorded save path.
+     */
+    suspend fun downloadIdForFile(filePath: String): String? = withContext(Dispatchers.IO) {
+        val target = runCatching { File(filePath).absolutePath }.getOrNull() ?: return@withContext null
+        runCatching {
+            dao.getCompletedAndActive().firstOrNull { entity ->
+                val recorded = entity.localPath ?: return@firstOrNull false
+                target == recorded || target.startsWith(recorded.trimEnd('/') + "/")
+            }?.id
+        }.getOrNull()
+    }
+
+    /** Looks up one queue row, for the player to resolve its file. */
+    suspend fun findDownload(id: String): DownloadEntity? = withContext(Dispatchers.IO) {
+        runCatching { dao.findById(id) }.getOrNull()
+    }
+
     /** True when this download can be opened as a finished file. */
     fun localFileExists(entity: DownloadEntity): Boolean =
         entity.localPath?.let { resolveFile(it)?.exists() } == true

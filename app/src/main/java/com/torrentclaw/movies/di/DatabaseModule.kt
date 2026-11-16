@@ -29,7 +29,10 @@ object DatabaseModule {
     fun provideDatabase(@ApplicationContext context: Context): TorrentClawDatabase =
         Room.databaseBuilder(context, TorrentClawDatabase::class.java, TorrentClawDatabase.NAME)
             // Real migrations: an app update must never drop a user's watchlist.
-            .addMigrations(TorrentClawDatabase.MIGRATION_1_2)
+            .addMigrations(
+                TorrentClawDatabase.MIGRATION_1_2,
+                TorrentClawDatabase.MIGRATION_2_3,
+            )
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 

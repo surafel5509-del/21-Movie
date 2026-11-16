@@ -116,6 +116,13 @@ interface DownloadDao {
     @Query("SELECT * FROM downloads WHERE id = :id LIMIT 1")
     suspend fun findById(id: String): DownloadEntity?
 
+    /** Rows that could have produced a file on disk (finished or still moving). */
+    @Query(
+        "SELECT * FROM downloads WHERE kind IN ('TORRENT','MEDIA') " +
+            "AND status IN ('COMPLETED','ACTIVE','PAUSED','QUEUED') ORDER BY updated_at DESC",
+    )
+    suspend fun getCompletedAndActive(): List<DownloadEntity>
+
     @Query("SELECT * FROM downloads WHERE id = :id LIMIT 1")
     fun observeById(id: String): Flow<DownloadEntity?>
 

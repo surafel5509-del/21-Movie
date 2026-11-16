@@ -23,6 +23,15 @@ sealed interface Destination {
     @Serializable
     data object Settings : Destination
 
+    /**
+     * Full-screen player for a downloaded file, addressed by download row id.
+     *
+     * Not a bottom-bar destination: it takes over the screen, hides the bars and
+     * is the surface that goes into picture-in-picture.
+     */
+    @Serializable
+    data class Player(val downloadId: String) : Destination
+
     /** Detail is addressed by content id + title (TorrentClaw looks content up by title). */
     @Serializable
     data class MovieDetail(

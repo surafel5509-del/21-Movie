@@ -13,6 +13,10 @@
     <!-- Wakes the CPU only while a torrent is actively transferring -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- In-app playback: a foreground media service keeps the movie playing while
+         the app is backgrounded or in picture-in-picture. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
     <!--
       Android 11 (API 30) package visibility: without these <queries> entries the
       system hides every torrent client from us, so Intent.resolveActivity() would
@@ -60,6 +64,22 @@
             android:foregroundServiceType="dataSync"
             android:stopWithTask="false" />
 
+        <!-- Player session: notifications, lock-screen controls, PiP, and playback
+             that continues while the app is not on screen. -->
+        <service
+            android:name=".data.player.PlaybackService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback"
+            android:stopWithTask="true">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
+
+        <receiver
+            android:name=".ui.player.PlayerPipReceiver"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -70,11 +90,19 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!--
+          supportsPictureInPicture + resizeableActivity: the player shrinks into a
+          floating window instead of handing the movie to another app, and the
+          window can be resized freely. configChanges keeps the rotation from
+          recreating the activity (and therefore the player).
+        -->
         <activity
             android:name=".MainActivity"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density"
             android:exported="true"
             android:launchMode="singleTop"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="true"
             android:theme="@style/Theme.TorrentClawMovies.Splash"
             android:windowSoftInputMode="adjustResize">
 

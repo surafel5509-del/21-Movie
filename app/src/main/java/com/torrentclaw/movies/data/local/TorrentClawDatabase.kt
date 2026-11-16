@@ -6,8 +6,13 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [WatchlistEntity::class, CachedMovieEntity::class, DownloadEntity::class],
-    version = 2,
+    entities = [
+        WatchlistEntity::class,
+        CachedMovieEntity::class,
+        DownloadEntity::class,
+        PlaybackPositionEntity::class,
+    ],
+    version = 3,
     exportSchema = true,
 )
 abstract class TorrentClawDatabase : RoomDatabase() {
@@ -17,6 +22,8 @@ abstract class TorrentClawDatabase : RoomDatabase() {
     abstract fun cachedMovieDao(): CachedMovieDao
 
     abstract fun downloadDao(): DownloadDao
+
+    abstract fun playbackDao(): PlaybackDao
 
     companion object {
         const val NAME = "torrentclaw_movies.db"
@@ -56,6 +63,29 @@ abstract class TorrentClawDatabase : RoomDatabase() {
                 )
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_downloads_status` ON `downloads` (`status`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_downloads_created_at` ON `downloads` (`created_at`)")
+            }
+        }
+
+        /**
+         * v2 → v3 adds resume positions for the in-app player. Additive: existing
+         * downloads, watchlist and caches are untouched.
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `playback_positions` (
+                        `file_path` TEXT NOT NULL,
+                        `movie_id` INTEGER NOT NULL,
+                        `movie_title` TEXT NOT NULL,
+                        `poster_url` TEXT,
+                        `position_ms` INTEGER NOT NULL,
+                        `duration_ms` INTEGER NOT NULL,
+                        `updated_at` INTEGER NOT NULL,
+                        PRIMARY KEY(`file_path`)
+                    )
+                    """.trimIndent(),
+                )
             }
         }
     }
