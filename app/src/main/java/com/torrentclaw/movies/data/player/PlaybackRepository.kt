@@ -21,11 +21,20 @@ data class ResumeState(
      * A position is only worth restoring when there is a real gap to skip. Below
      * this the intro is replayed anyway, which is what people expect.
      */
+    /** True when there is a meaningful amount left to watch. */
     val shouldResume: Boolean
-        get() = positionMs > MIN_RESUME_MS && (watchedFraction == null || watchedFraction < 0.98f)
+        get() = positionMs > MIN_RESUME_MS &&
+            (
+                watchedFraction == null ||
+                    positionMs < (durationMs - TAIL_TOLERANCE_MS)
+                )
 
     companion object {
+        /** Below this the intro is replayed anyway, which is what people expect. */
         const val MIN_RESUME_MS = 15_000L
+
+        /** Anything this close to the end counts as finished: replay, don't resume. */
+        const val TAIL_TOLERANCE_MS = 120_000L
     }
 }
 

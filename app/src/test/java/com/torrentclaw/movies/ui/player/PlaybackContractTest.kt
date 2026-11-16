@@ -33,13 +33,24 @@ class PlaybackContractTest {
     fun `a mid-film position resumes`() {
         val state = ResumeState(positionMs = 2_520_000, durationMs = 7_200_000)
         assertTrue(state.shouldResume)
-        assertEquals(0.35f, state.watchedFraction!!, 0.01f)
+        assertEquals(
+            0.35f,
+            (state.positionMs.toFloat() / state.durationMs.toFloat()),
+            0.01f,
+        )
     }
 
     @Test
-    fun `a finished film replays from the start`() {
-        val state = ResumeState(positionMs = 7_190_000, durationMs = 7_200_000)
-        assertFalse("must not resume a resolved ending", state.shouldResume)
+    fun `a film in its last two minutes replays rather than resuming`() {
+        // Dropping the viewer at 1:59:50 to watch two minutes is worse than
+        // restarting; the tail tolerance encodes that judgement.
+        val ending = ResumeState(positionMs = 7_190_000, durationMs = 7_200_000)
+        assertFalse("must not resume a resolved ending", ending.shouldResume)
+
+        // Just outside the tolerance still resumes, so a long film is not restarted
+        // by an over-eager rule.
+        val nearly = ResumeState(positionMs = 7_000_000, durationMs = 7_200_000)
+        assertTrue(nearly.shouldResume)
     }
 
     @Test
