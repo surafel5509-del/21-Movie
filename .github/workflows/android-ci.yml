@@ -61,6 +61,22 @@ jobs:
             exit "$status"
           fi
 
+
+      # Diagnostics: publish the failing excerpt as a commit comment so the
+      # failure is readable without downloading logs or artifacts.
+      - name: Report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LOG: gradle-test.log
+          TITLE: Unit tests
+        run: |
+          test -f "$LOG" || exit 0
+          excerpt=$(grep -nE '^e: |error:|FAILED|What went wrong|Caused by:|Unresolved reference|Compilation error|> Task .*FAILED|Could not resolve' "$LOG" | head -60)
+          [ -n "$excerpt" ] || excerpt=$(tail -60 "$LOG")
+          jq -n --arg body "**$TITLE failed** on \`${GITHUB_SHA:0:7}\`"\$'\n\n```\n'"$excerpt"\$'\n```' '{body: $body}' > payload.json
+          gh api -X POST "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" --input payload.json --jq '.html_url' || echo "commit comment failed"
+
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
@@ -123,6 +139,22 @@ jobs:
               | head -40 | while IFS= read -r line; do echo "::error title=Assemble::$line"; done
             exit "$status"
           fi
+
+
+      # Diagnostics: publish the failing excerpt as a commit comment so the
+      # failure is readable without downloading logs or artifacts.
+      - name: Report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LOG: gradle-assemble.log
+          TITLE: Assemble debug
+        run: |
+          test -f "$LOG" || exit 0
+          excerpt=$(grep -nE '^e: |error:|FAILED|What went wrong|Caused by:|Unresolved reference|Compilation error|> Task .*FAILED|Could not resolve' "$LOG" | head -60)
+          [ -n "$excerpt" ] || excerpt=$(tail -60 "$LOG")
+          jq -n --arg body "**$TITLE failed** on \`${GITHUB_SHA:0:7}\`"\$'\n\n```\n'"$excerpt"\$'\n```' '{body: $body}' > payload.json
+          gh api -X POST "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" --input payload.json --jq '.html_url' || echo "commit comment failed"
 
       - name: Upload assemble log
         if: failure()
