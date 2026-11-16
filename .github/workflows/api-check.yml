@@ -71,15 +71,20 @@ jobs:
             head -c 400 "$BODY"; exit 1
           fi
 
-          # The two fields the magnet/dowload path needs.
-          HASHES=$(grep -o '"infoHash"' "$BODY" | wc -l | tr -d ' ')
-          MAGNETS=$(grep -o '"magnetUrl"' "$BODY" | wc -l | tr -d ' ')
-          FILES=$(grep -o '"torrentUrl"' "$BODY" | wc -l | tr -d ' ')
+          # The two fields the magnet/download path needs.
+          HASHES=$(grep -o '\"infoHash\"' "$BODY" | wc -l | tr -d ' ')
+          MAGNETS=$(grep -o '\"magnetUrl\"' "$BODY" | wc -l | tr -d ' ')
+          FILES=$(grep -o '\"torrentUrl\"' "$BODY" | wc -l | tr -d ' ')
+          NOTICE=$(grep -o '\"_notice\":\"[^\"]*\"' "$BODY" | head -1 || true)
           echo "infoHash fields: $HASHES, magnetUrl fields: $MAGNETS, torrentUrl fields: $FILES"
+          # Surface the result in the annotations, because step logs are not always
+          # retrievable and a silent failure here is useless.
+          echo "::notice::tier=${TIER:-unknown} hashes=$HASHES magnets=$MAGNETS files=$FILES notice=$NOTICE"
+          echo "ANON_BODY=$(head -c 300 "$BODY" | tr -d '\n' | sed 's/%/%25/g')" >> "$GITHUB_ENV"
 
           if [ "$HASHES" -eq 0 ]; then
-            echo "::error::Authenticated search returned no infoHash. The key does not unlock magnets, so downloads will be locked."
-            grep -o '"_notice":"[^"]*"' "$BODY" | head -1 || true
+            echo "::error::Authenticated search returned no infoHash (tier=${TIER:-unknown}, notice=${NOTICE:-none}). The key does not unlock magnets, so downloads would be locked."
+            echo "First 300 chars of the response:"; head -c 300 "$BODY"; echo
             exit 1
           fi
 
