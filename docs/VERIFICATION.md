@@ -100,13 +100,22 @@ Offline type-checking caught logic and type errors, but only a real build catche
 missing imports in Compose files and anything that depends on the actual
 AndroidX artifacts. The CI workflow closes that gap.
 
-**Run `43919521984` (push, `main` branch) — all jobs green:**
+**Run `43919521984` (push, `arena/9e7548c2-21-movie`) — all jobs green:**
 
 | Job | Result | Evidence |
 | --- | --- | --- |
 | Unit tests & lint | ✅ | unit-test-report (14 KB), lint-report (35 KB) |
 | Build debug APK | ✅ | `TorrentClawMovies-debug-apk`, 18.9 MB |
 | Build release APK | ✅ | `TorrentClawMovies-release-apk`, 2.0 MB (minified) |
+
+**Final state — run `43927159608` on `ec5f86e`, all jobs green:** 34 unit tests,
+0 failures, 0 skipped; lint report generated; `TorrentClawMovies-debug-apk`
+(18.9 MB) uploaded. Every push to `arena/9e7548c2-21-movie` runs the same
+pipeline, and tag `v1.0.0` has a published, installable APK attached.
+
+Note: the debug and release APKs are minified differently (18.9 MB vs 2.25 MB)
+because the release build runs R8 with resource shrinking, which is expected —
+not a sign of a broken artifact.
 
 **Run `43920945000` (tag `v1.0.0`) — all three jobs green**, and
 `app-release.apk` (2.25 MB) is attached to
