@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TorrentClaw</string>
+    <string name="app_name_full">TorrentClaw Movies</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Discover</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_watchlist">Watchlist</string>
+    <string name="nav_settings">Settings</string>
+    <string name="back">Back</string>
+    <string name="search">Search</string>
+    <string name="retry">Retry</string>
+    <string name="retry_label">Retry</string>
+    <string name="cancel">Cancel</string>
+    <string name="done">Done</string>
+    <string name="clear">Clear</string>
+
+    <!-- Home -->
+    <string name="home_greeting">Find your next movie night</string>
+    <string name="home_featured">#1 Trending now</string>
+    <string name="home_popular">Popular right now</string>
+    <string name="home_recent">Fresh releases</string>
+    <string name="home_empty">Nothing is trending yet</string>
+    <string name="home_empty_body">Tap refresh in the top bar, or search for a title.</string>
+    <string name="home_error">Couldn\'t reach TorrentClaw</string>
+    <string name="home_refresh_failed">Refresh failed. Showing cached results.</string>
+
+    <!-- Search -->
+    <string name="search_hint">Search movies, e.g. Inception</string>
+    <string name="search_idle_title">Search 40k+ movies</string>
+    <string name="search_idle_body">Type a title to see releases with magnet links.</string>
+    <string name="search_empty_title">No releases found</string>
+    <string name="search_empty_body">Try a shorter title, remove a filter, or change the quality.</string>
+    <string name="search_results_count">%1$d results</string>
+    <string name="filter_quality">Quality</string>
+    <string name="filter_sort">Sort</string>
+    <string name="filter_all">All</string>
+    <string name="quality_720">720p</string>
+    <string name="quality_1080">1080p</string>
+    <string name="quality_2160">2160p</string>
+    <string name="sort_seeders">Seeders</string>
+    <string name="sort_newest">Newest</string>
+    <string name="sort_size">Size</string>
+    <string name="search_rate_limited">Too many searches. Pause for a moment.</string>
+
+    <!-- Detail -->
+    <string name="detail_releases">Available releases</string>
+    <string name="detail_releases_count">%1$d releases</string>
+    <string name="detail_no_releases">No torrents indexed for this movie yet.</string>
+    <string name="detail_overview">Overview</string>
+    <string name="detail_genres">Genres</string>
+    <string name="detail_open_magnet">Open magnet</string>
+    <string name="detail_copy_magnet">Copy</string>
+    <string name="detail_no_client">No torrent app installed. Magnet copied — install Flud or qBittorrent to open it.</string>
+    <string name="detail_magnet_copied">Magnet link copied</string>
+    <string name="detail_saved">Added to watchlist</string>
+    <string name="detail_removed">Removed from watchlist</string>
+    <string name="detail_bookmark">Bookmark</string>
+    <string name="detail_remove_bookmark">Remove bookmark</string>
+    <string name="detail_seeders">S seeders</string>
+    <string name="detail_leechers">L leechers</string>
+    <string name="detail_health_strong">Healthy swarm</string>
+    <string name="detail_health_weak">Low swarm</string>
+    <string name="detail_release_group">Group</string>
+    <string name="detail_loading">Loading movie…</string>
+    <string name="detail_error">Couldn\'t load this movie</string>
+    <string name="detail_saved_offline">This movie is in your watchlist</string>
+
+    <!-- Watchlist -->
+    <string name="watchlist_title">Watchlist</string>
+    <string name="watchlist_empty_title">Your watchlist is empty</string>
+    <string name="watchlist_empty_body">Tap the bookmark on any movie to keep it here, even offline.</string>
+    <string name="watchlist_remove">Remove</string>
+    <string name="watchlist_removed_message">Removed %1$s</string>
+    <string name="undo">Undo</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_theme_dark">Dark (cinema)</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_dynamic_color">Dynamic color</string>
+    <string name="settings_dynamic_color_desc">Use your wallpaper\'s palette (Android 12+)</string>
+    <string name="settings_preferences">Preferences</string>
+    <string name="settings_quality">Preferred quality</string>
+    <string name="settings_quality_desc">Pre-filters search results and highlights releases</string>
+    <string name="settings_haptics">Haptic feedback</string>
+    <string name="settings_haptics_desc">Vibrate when copying a magnet link</string>
+    <string name="settings_about">About</string>
+    <string name="settings_version">Version %1$s</string>
+    <string name="settings_version_title">Version</string>
+    <string name="settings_data_source_title">Metadata source</string>
+    <string name="settings_api_status">TorrentClaw API key</string>
+    <string name="settings_api_configured">Configured · 120 req/min</string>
+    <string name="settings_api_anonymous">Anonymous · 30 req/min</string>
+    <string name="settings_data_source">Metadata by TMDB via TorrentClaw</string>
+
+    <!-- Search extras -->
+    <string name="search_back">Back</string>
+    <string name="search_reset_filters">Reset filters</string>
+    <string name="search_field_hint">Search movies, e.g. Inception</string>
+    <string name="search_results_header">Results</string>
+    <string name="search_filtered_to">Filtered to %1$s</string>
+    <string name="search_idle_title_long">Search 40k+ movies</string>
+    <string name="search_idle_body_long">Type a title to see releases with magnet links. Results are debounced so the app never trips the API rate limit.</string>
+    <string name="search_error_title">Couldn\'t search</string>
+    <string name="search_rate_limited_title">Rate limited</string>
+
+    <!-- Detail extras -->
+    <string name="detail_best_swarm">Best swarm</string>
+    <string name="detail_score">%1$d/100</string>
+    <string name="detail_no_torrents_title">No torrents indexed yet</string>
+    <string name="detail_no_torrents_body">TorrentClaw hasn\'t scraped a release for this title. It is still bookmarked for later.</string>
+    <string name="detail_magnet_disclaimer">Magnet links open your installed torrent client. TorrentClaw indexes public releases; the app never hosts files.</string>
+    <string name="detail_open_magnet_malformed">That magnet link is malformed.</string>
+    <string name="detail_directed_by">Directed by %1$s</string>
+    <string name="detail_install_client_hint">Install a torrent client, then tap Open magnet again.</string>
+
+    <!-- Watchlist extras -->
+    <string name="watchlist_count">%1$d saved · available offline</string>
+    <string name="watchlist_browse">Browse trending</string>
+    <string name="watchlist_error_title">Couldn\'t read saved movies</string>
+
+    <!-- Home extras -->
+    <string name="home_refresh">Refresh trending movies</string>
+    <string name="home_search_action">Search movies</string>
+    <string name="home_offline_notice">Offline — showing your last synced list.</string>
+    <string name="home_section_popular">Popular right now</string>
+    <string name="home_section_fresh">Fresh releases</string>
+    <string name="home_section_subtitle">%1$d movies · tap a poster for magnet links</string>
+
+    <!-- Misc -->
+    <string name="loading">Loading</string>
+    <string name="error_offline_title">You\'re offline</string>
+    <string name="error_generic_title">Something went wrong</string>
+    <string name="poster_of">%1$s poster</string>
+    <string name="release_quality_unknown">Unknown quality</string>
+</resources>

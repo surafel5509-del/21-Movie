@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  API 25-30 backup rules: the watchlist (Room) and preferences are the only
+  things worth restoring. No auth material is stored, so nothing is excluded.
+-->
+<full-backup-content>
+    <include domain="database" path="torrentclaw_movies.db" />
+    <include domain="file" path="datastore/" />
+</full-backup-content>
