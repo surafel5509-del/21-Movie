@@ -158,6 +158,7 @@ fun HomeScreen(
                     gridState = gridState,
                     onMovieClick = onMovieClick,
                     onRefresh = viewModel::refresh,
+                    onResume = { entry -> viewModel.playResume(entry, onPlayClick) },
                 )
             }
         }
