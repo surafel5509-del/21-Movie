@@ -27,6 +27,8 @@ class MagnetResolver @Inject constructor() {
     }
 
     fun build(infoHash: String, displayName: String?): String {
+        // btih is hex; libtorrent's Sha1Hash.parseHex() rejects upper case input on
+        // some paths, and two spellings of one hash would double-count the swarm.
         val hash = infoHash.trim().lowercase()
         val name = displayName?.trim().orEmpty().ifBlank { hash }
         return buildString {
