@@ -54,6 +54,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import coil.compose.AsyncImage
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.LinearProgressIndicator
+import com.torrentclaw.movies.data.local.PlaybackPositionEntity
 
 /**
  * Home / Discovery: a featured hero banner for the #1 trending movie, then a
@@ -163,6 +170,7 @@ private fun HomeContent(
     gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
     onMovieClick: (Int, String) -> Unit,
     onRefresh: () -> Unit,
+    onResume: (PlaybackPositionEntity) -> Unit,
 ) {
     val movies = if (uiState.popular.isNotEmpty()) uiState.popular else uiState.recent
 
@@ -201,7 +209,7 @@ private fun HomeContent(
             item(span = { GridItemSpan(maxLineSpan) }) {
                 ContinueWatchingRow(
                     entries = uiState.continueWatching,
-                    onPlay = { entry -> viewModel.playResume(entry, onPlayClick) },
+                    onPlay = onResume,
                 )
             }
         }
@@ -293,7 +301,7 @@ private fun ContinueWatchingRow(
             )
         }
 
-        androidx.compose.foundation.lazy.LazyRow(
+        LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {

@@ -6,8 +6,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -291,19 +289,22 @@ private fun PillNavItem(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(contentAlignment = Alignment.Center) {
-            // Selected-state halo behind the icon.
-            AnimatedVisibility(
-                visible = selected,
-                enter = scaleIn(spring(dampingRatio = 0.55f, stiffness = 500f)),
-                exit = scaleOut(tween(120)),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
-                )
-            }
+            // Selected-state halo behind the icon. Driven by animated alpha/scale
+            // rather than AnimatedVisibility: nested inside Column → Box the
+            // ColumnScope overload is the only resolvable candidate, which does not
+            // compile here.
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .graphicsLayer {
+                        val halo = if (selected) 1f else 0f
+                        alpha = halo
+                        scaleX = halo
+                        scaleY = halo
+                    }
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+            )
             Icon(
                 imageVector = tab.icon(selected),
                 contentDescription = tab.label,

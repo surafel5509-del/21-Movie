@@ -510,9 +510,11 @@ fun enterPip(activity: Activity?, player: Player, session: PlayerUiSession): Boo
         }
         val actions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             // Play/pause/fast-forward/rewind inside the PiP window.
+            // RemoteAction(icon, title, contentDescription, pendingIntent)
             android.app.RemoteAction(
                 android.graphics.drawable.Icon.createWithResource(activity, android.R.drawable.ic_media_play),
                 "Play",
+                "Play or pause",
                 android.app.PendingIntent.getBroadcast(
                     activity,
                     0,
