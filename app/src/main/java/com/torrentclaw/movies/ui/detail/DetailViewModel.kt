@@ -189,7 +189,7 @@ class DetailViewModel @Inject constructor(
         effects.value = DetailEffect.OpenMagnet(magnet)
         viewModelScope.launch {
             // Analytics ping; deliberately fire-and-forget so the UI never waits.
-            movieRepository.trackMagnet(release.infoHash, "magnet")
+            release.infoHash?.let { movieRepository.trackMagnet(it, "magnet") }
         }
     }
 
@@ -263,7 +263,9 @@ class DetailViewModel @Inject constructor(
     }
 
     fun onCopied(release: TorrentRelease) {
-        viewModelScope.launch { movieRepository.trackMagnet(release.infoHash, "copy") }
+        release.infoHash?.let { hash ->
+            viewModelScope.launch { movieRepository.trackMagnet(hash, "copy") }
+        }
         effects.value = DetailEffect.MagnetCopied
     }
 

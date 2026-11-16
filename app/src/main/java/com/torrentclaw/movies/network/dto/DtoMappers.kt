@@ -111,7 +111,7 @@ fun TorrentDto.toRelease(magnetResolver: MagnetResolver, movieTitle: String): To
         sizeBytes = sizeBytes.toSizeBytes(),
         seeders = seeders.coerceAtLeast(0),
         leechers = leechers.coerceAtLeast(0),
-        magnetUri = magnet.takeIf { it.startsWith("magnet:?", ignoreCase = true) },
+        magnetUri = magnet?.takeIf { it.startsWith("magnet:?", ignoreCase = true) },
         // The API may expose either an absolute URL or only the hash, in which
         // case the documented /api/v1/torrent/{infoHash} route is used.
         torrentUrl = torrentUrl?.trim()?.takeIf { it.isNotBlank() }

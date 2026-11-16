@@ -226,7 +226,7 @@ class TorrentEngine @Inject constructor() {
         val info = handle?.let { runCatching { it.torrentFile() }.getOrNull() }
         if (handle != null && info != null) {
             runCatching {
-                val priorities = Priority.array(Priority.SKIP, info.numFiles())
+                val priorities = Priority.array(Priority.IGNORE, info.numFiles())
                 val storage = info.files()
                 for (index in 0 until info.numFiles()) {
                     val path = runCatching { storage.filePath(index) }.getOrNull().orEmpty()
