@@ -137,6 +137,29 @@
     <string name="count_leechers">%1$s leechers</string>
     <string name="count_releases_short">%1$d</string>
 
+    <!-- Downloads -->
+    <string name="nav_downloads">Downloads</string>
+    <string name="downloads_title">Downloads</string>
+    <string name="downloads_summary">%1$s downloaded to your device</string>
+    <string name="downloads_active">In progress</string>
+    <string name="downloads_completed">Completed</string>
+    <string name="downloads_failed">Failed</string>
+    <string name="downloads_empty_title">No downloads yet</string>
+    <string name="downloads_empty_body">Open a movie and tap Download .torrent to fetch the file here.</string>
+    <string name="downloads_clear_finished">Clear finished</string>
+    <string name="download_kind_torrent">.torrent file</string>
+    <string name="download_kind_media">Media file</string>
+    <string name="download_pause">Pause download</string>
+    <string name="download_resume">Resume download</string>
+    <string name="download_retry">Retry download</string>
+    <string name="download_cancel">Remove download</string>
+    <string name="download_open">Open in torrent app</string>
+    <string name="download_failed_generic">Download failed</string>
+    <string name="download_torrent_file">Download .torrent</string>
+    <string name="download_queued">Queued · see Downloads tab</string>
+    <string name="download_no_client_file">No torrent app could open this file. Install qBittorrent or Flud.</string>
+    <string name="detail_download_heading">Download</string>
+
     <!-- Misc -->
     <string name="loading">Loading</string>
     <string name="error_offline_title">You\'re offline</string>

@@ -6,10 +6,22 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import coil.request.CachePolicy
+import com.torrentclaw.movies.data.download.DownloadManager
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
 
 @HiltAndroidApp
 class TorrentClawApp : Application(), ImageLoaderFactory {
+
+    @Inject
+    lateinit var downloadManager: DownloadManager
+
+    override fun onCreate() {
+        super.onCreate()
+        // A download that was interrupted by a process death picks up where it
+        // stopped, using the byte count persisted in Room.
+        downloadManager.resumePending()
+    }
 
     /**
      * Poster art dominates bandwidth in this app, so Coil gets an explicit

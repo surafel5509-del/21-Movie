@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
 import com.torrentclaw.movies.data.local.CachedMovieDao
+import com.torrentclaw.movies.data.local.DownloadDao
 import com.torrentclaw.movies.data.local.TorrentClawDatabase
 import com.torrentclaw.movies.data.local.WatchlistDao
 import dagger.Module
@@ -27,7 +28,8 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): TorrentClawDatabase =
         Room.databaseBuilder(context, TorrentClawDatabase::class.java, TorrentClawDatabase.NAME)
-            // Schema v1 ships with its export; future versions must add real migrations.
+            // Real migrations: an app update must never drop a user's watchlist.
+            .addMigrations(TorrentClawDatabase.MIGRATION_1_2)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 
@@ -39,6 +41,10 @@ object DatabaseModule {
     @Singleton
     fun provideCachedMovieDao(database: TorrentClawDatabase): CachedMovieDao =
         database.cachedMovieDao()
+
+    @Provides
+    @Singleton
+    fun provideDownloadDao(database: TorrentClawDatabase): DownloadDao = database.downloadDao()
 
     @Provides
     @Singleton

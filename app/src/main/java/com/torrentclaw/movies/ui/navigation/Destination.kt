@@ -18,6 +18,9 @@ sealed interface Destination {
     data object Watchlist : Destination
 
     @Serializable
+    data object Downloads : Destination
+
+    @Serializable
     data object Settings : Destination
 
     /** Detail is addressed by content id + title (TorrentClaw looks content up by title). */
@@ -42,4 +45,5 @@ enum class TopLevelDestination(
     HOME(Destination.Home, "Discover", "home"),
     SEARCH(Destination.Search, "Search", "search"),
     WATCHLIST(Destination.Watchlist, "Watchlist", "watchlist"),
+    DOWNLOADS(Destination.Downloads, "Downloads", "downloads"),
 }

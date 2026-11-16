@@ -33,9 +33,30 @@ val torrentClawApiKey: String = run {
         ?: ""
 }
 
+/**
+ * Release signing is optional. Provide a keystore through environment variables
+ * (CI) and the release build is signed properly; otherwise it falls back to the
+ * debug key so `assembleRelease` still yields an installable APK for testers.
+ */
+val releaseKeystorePath: String? = System.getenv("KEYSTORE_PATH")
+val hasReleaseKeystore = !releaseKeystorePath.isNullOrBlank() && file(releaseKeystorePath).exists()
+
 android {
     namespace = "com.torrentclaw.movies"
     compileSdk = 35
+
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = file(releaseKeystorePath!!)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+                enableV1Signing = true
+                enableV2Signing = true
+            }
+        }
+    }
 
     defaultConfig {
         applicationId = "com.torrentclaw.movies"
@@ -59,6 +80,8 @@ android {
             buildConfigField("boolean", "HTTP_LOGGING_ENABLED", "true")
         }
         release {
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

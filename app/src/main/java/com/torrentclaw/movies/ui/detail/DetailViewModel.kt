@@ -3,6 +3,7 @@ package com.torrentclaw.movies.ui.detail
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.torrentclaw.movies.data.download.DownloadManager
 import com.torrentclaw.movies.data.repository.MovieRepository
 import com.torrentclaw.movies.data.repository.WatchlistRepository
 import com.torrentclaw.movies.domain.model.Movie
@@ -51,6 +52,7 @@ sealed interface DetailEffect {
     data class ShowSnackbar(val message: String) : DetailEffect
     data class OpenMagnet(val magnetUri: String) : DetailEffect
     data object MagnetCopied : DetailEffect
+    data object TorrentQueued : DetailEffect
     data object NoTorrentClient : DetailEffect
 }
 
@@ -66,6 +68,7 @@ class DetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val movieRepository: MovieRepository,
     private val watchlistRepository: WatchlistRepository,
+    private val downloadManager: DownloadManager,
 ) : ViewModel() {
 
     private val movieId: Int = runCatching {
@@ -172,6 +175,24 @@ class DetailViewModel @Inject constructor(
 
     fun onMagnetOpened() {
         effects.value = null
+    }
+
+    /**
+     * Queues the release's `.torrent` file for real, resumable downloading.
+     * The file lands in Downloads/TorrentClaw and can then be opened in any
+     * torrent client (see the Downloads tab).
+     */
+    fun onDownloadTorrent(release: TorrentRelease) {
+        val movie = _uiState.value.movie ?: return
+        viewModelScope.launch {
+            runCatching { downloadManager.enqueueTorrentFile(movie, release) }
+                .onSuccess { effects.value = DetailEffect.TorrentQueued }
+                .onFailure {
+                    effects.value = DetailEffect.ShowSnackbar(
+                        it.message ?: "Couldn't start the download.",
+                    )
+                }
+        }
     }
 
     fun onCopied(release: TorrentRelease) {

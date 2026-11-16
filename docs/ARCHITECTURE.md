@@ -164,6 +164,43 @@ unit-testable and appears in exactly one file. Package visibility for
 
 ---
 
+## 5.5 Downloads
+
+The queue is a Room table plus an in-memory set of `Job` handles:
+
+```
+DownloadEntity ──(status)──▶ DownloadManager.jobs[id]
+      ▲                              │
+      │ updateProgress every ~250 ms  │ Semaphore(2)
+      └──────────── FileDownloader ◀──┘
+```
+
+- **Resumability.** `FileDownloader` re-opens the staging file, seeks to its
+  length, sends `Range: bytes=<len>-`, and only appends on `206 Partial Content`.
+  A server that ignores the range triggers a clean restart rather than a corrupt file.
+- **Cancellation.** Every read-loop iteration calls
+  `currentCoroutineContext().ensureActive()`, so pausing stops I/O in the next
+  64 KB, not after the whole body drains. `CancellationException` is translated
+  to `PAUSED` (bytes kept), never to `FAILED`.
+- **Publishing.** Staged bytes live in `cacheDir/downloads_staging`; only a
+  completed transfer is written into MediaStore `Downloads/TorrentClaw`
+  (`IS_PENDING` on API 29+, legacy public dir below).
+- **Handoff.** `DownloadManager.openTorrentFile` builds a `FileProvider` URI
+  (authority `${applicationId}.fileprovider`, paths in `res/xml/file_paths.xml`).
+  `file://` URIs are never used — they throw `FileUriExposedException` on API 24+.
+- **Concurrency limit.** `Semaphore(2)` bounds simultaneous transfers;
+  additional jobs wait in `QUEUED` and are picked up on `resumePending()`.
+- **Schema evolution.** v1 → v2 adds the table through a real
+  `Migration(1, 2)` with matching indices; there is a unit test asserting the
+  entity's id/progress semantics so a refactor cannot silently break the queue.
+
+### Why not an embedded BitTorrent engine
+
+A P2P engine needs a foreground service, wake locks, per-IP tracker handling,
+port management and thermal testing — plus it changes the app's legal posture
+from "index client" to "downloader". This app instead fetches the `.torrent`
+(an ordinary HTTPS resource) and hands it to the client the user already trusts.
+
 ## 6. Navigation
 
 Type-safe routes via kotlinx.serialization:
@@ -241,6 +278,8 @@ serializers, Retrofit interfaces and Room subclasses.
 | Title-based detail lookup | No `/movie/{id}` endpoint exists | One extra search request per detail open |
 | Denormalised watchlist rows | Offline-first rendering | Stale metadata until the movie is re-saved |
 | No paging library | 24-item pages, single page in UI | Infinite scroll is a follow-up |
+| Torrent files, not media bytes | Delegates real P2P transfer to the user's client | The app can't stream from a swarm by itself |
+| In-process download manager | No WorkManager dependency; jobs resume on next app start | A download pauses if the process is killed |
 
 ## 10. Extending the app
 

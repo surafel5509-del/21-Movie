@@ -114,6 +114,14 @@ fun DetailScreen(
                 snackbarHostState.showSnackbar(context.getString(R.string.detail_magnet_copied))
                 viewModel.clearEffect()
             }
+            DetailEffect.TorrentQueued -> {
+                val result = snackbarHostState.showSnackbar(
+                    message = context.getString(R.string.download_queued),
+                    actionLabel = null,
+                    withDismissAction = true,
+                )
+                viewModel.clearEffect()
+            }
             DetailEffect.NoTorrentClient -> {
                 val snackbar = snackbarHostState.showSnackbar(
                     message = context.getString(R.string.detail_no_client),
@@ -213,6 +221,7 @@ fun DetailScreen(
                         viewModel.onCopied(release)
                     },
                     onSortSelected = viewModel::setReleaseSort,
+                    onDownloadTorrent = viewModel::onDownloadTorrent,
                 )
             }
         }
@@ -225,6 +234,7 @@ private fun DetailContent(
     onOpenMagnet: (TorrentRelease) -> Unit,
     onCopyMagnet: (TorrentRelease) -> Unit,
     onSortSelected: (SortOption) -> Unit,
+    onDownloadTorrent: (TorrentRelease) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val movie = uiState.movie ?: return
@@ -366,6 +376,7 @@ private fun DetailContent(
                     highlightedQuality = null,
                     onOpenMagnet = { onOpenMagnet(release) },
                     onCopyMagnet = { onCopyMagnet(release) },
+                    onDownloadTorrent = { onDownloadTorrent(release) },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp),
                 )
             }

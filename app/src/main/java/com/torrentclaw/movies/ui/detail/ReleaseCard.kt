@@ -48,6 +48,7 @@ fun ReleaseCard(
     release: TorrentRelease,
     onOpenMagnet: () -> Unit,
     onCopyMagnet: () -> Unit,
+    onDownloadTorrent: () -> Unit,
     modifier: Modifier = Modifier,
     isBest: Boolean = false,
     highlightedQuality: String? = null,
@@ -216,6 +217,35 @@ fun ReleaseCard(
                         style = MaterialTheme.typography.labelLarge,
                     )
                 }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Second row: fetch the actual .torrent file so the user can keep or
+            // hand it to a client without opening a magnet first.
+            OutlinedButton(
+                onClick = onDownloadTorrent,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(42.dp),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
+                ),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Download,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = stringResource(R.string.download_torrent_file),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
             }
         }
     }

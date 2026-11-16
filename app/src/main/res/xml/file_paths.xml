@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Paths the FileProvider may hand to other apps. Only finished .torrent files
+  are shared (opened in the user's torrent client); staged partial downloads are
+  deliberately excluded so a half-written file can never leak.
+-->
+<paths>
+    <external-path name="external_downloads" path="Download/TorrentClaw/" />
+    <external-files-path name="external_files" path="Download/" />
+    <cache-path name="torrent_cache" path="downloads_staging/" />
+</paths>

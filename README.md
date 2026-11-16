@@ -22,6 +22,12 @@ It is **not** a demo: there are no `TODO`s, every state (loading, empty, error,
 offline, rate-limited, no torrent client installed) is implemented, and the
 README documents the exact commands, versions and gotchas needed to build it.
 
+**Downloads are real.** Releases expose a **Download .torrent** action that
+streams the file from `/api/v1/torrent/{infoHash}` with byte-level progress,
+pause/resume/cancel, a resumable `Range` transfer, and a Room-persisted queue that
+survives process death. Finished files land in `Downloads/TorrentClaw` and open in
+your torrent client via a `FileProvider` handoff.
+
 > ⚠️ **Legal note.** TorrentClaw is a metadata indexer. This app ships no media,
 > hosts no files and runs no download engine — it hands magnet URIs to whichever
 > torrent client you already installed. You are responsible for what you
@@ -37,6 +43,37 @@ README documents the exact commands, versions and gotchas needed to build it.
 
 ---
 
+## Downloads — how it actually works
+
+```
+Detail → "Download .torrent"
+  → DetailViewModel.onDownloadTorrent(release)
+  → DownloadManager.enqueueTorrentFile(movie, release)   // row in Room, status=QUEUED
+  → DownloadManager.start(id)                            // ≤2 concurrent, Semaphore
+  → FileDownloader.download(url, resumeFrom = staging.length())
+        GET https://torrentclaw.com/api/v1/torrent/{infoHash}
+        Range: bytes=<offset>-          ← resumes after pause/kill
+        writes 64 KB chunks, syncs fd, reports ~4×/s
+  → publishToDownloads()                                 // MediaStore (API 29+) or legacy dir
+  → status=COMPLETED, path=Downloads/TorrentClaw/…torrent
+  → "Open" → FileProvider Uri → torrent client
+```
+
+Design decisions worth knowing:
+
+| Decision | Why |
+| --- | --- |
+| App downloads the `.torrent` itself, not the movie bytes | The movie bytes come from the swarm; a `.torrent` is a small HTTP file the app can legitimately and reliably fetch. |
+| No embedded BitTorrent engine | Shipping a native engine means a foreground service, wake locks, battery/thermal testing and a legal surface this app does not claim. Media transfer is delegated to the user's client through the standard magnet/.torrent handoff. |
+| `FileDownloader` stages to `cacheDir` then publishes | A partial file never shows up as a real download; publishing is atomic-ish per platform rules. |
+| Progress persisted in Room, not just in memory | The queue survives process death; `TorrentClawApp` calls `resumePending()` on start. |
+| Semaphore(2) | Two parallel transfers keep the UI responsive and mobile data sane. |
+| Real `Migration(1, 2)` | Adding the downloads table must not wipe existing watchlists. |
+
+Progress, speed and ETA are computed in `FileDownloader` (smoothed over 250 ms
+windows) and written through `DownloadDao.updateProgress`, so the Downloads tab
+is a pure function of Room state.
+
 ## Architecture
 
 ```
@@ -51,7 +88,8 @@ app/src/main/java/com/torrentclaw/movies
 │   ├── MagnetResolver.kt      rebuilds missing magnet URIs from the infoHash
 │   └── dto/                   kotlinx.serialization DTOs and DTO → domain mappers
 ├── data/
-│   ├── local/                 Room: WatchlistEntity/Dao, CachedMovieEntity/Dao, database
+│   ├── local/                 Room: Watchlist, CachedMovie, Download entities/DAOs, migrations
+│   ├── download/              FileDownloader (resumable HTTP) + DownloadManager (queue)
 │   ├── prefs/                 DataStore: theme, dynamic color, quality, sort, haptics
 │   └── repository/            MovieRepository (network + cache), WatchlistRepository (Room)
 ├── di/                        Hilt modules: network, database, repositories, dispatcher
@@ -60,7 +98,7 @@ app/src/main/java/com/torrentclaw/movies
     ├── navigation/            type-safe destinations + NavHost + bottom bar
     ├── components/            PosterImage, MovieCard, badges, hero, skeletons, formatters
     ├── util/                  MagnetLauncher (intents/clipboard), Haptics
-    ├── home/  search/  detail/  watchlist/  settings/    ViewModel + Screen per feature
+    ├── home/ search/ detail/ watchlist/ downloads/ settings/   ViewModel + Screen per feature
     └── MainViewModel.kt       theme + splash readiness
 ```
 
@@ -91,6 +129,7 @@ app/src/main/java/com/torrentclaw/movies
 | Images | Coil (`SubcomposeAsyncImage`) | 2.7.0 |
 | Storage | Room · DataStore Preferences | 2.6.1 · 1.1.1 |
 | Navigation | Navigation Compose (type-safe serialization routes) | 2.8.5 |
+| Downloads | OkHttp streaming + `FileProvider` + MediaStore | — |
 | Min / target / compile SDK | 26 / 35 / 35 | — |
 
 ---
@@ -155,6 +194,40 @@ on first sync. The Gradle wrapper (`gradlew`, `gradle-wrapper.jar`,
 You must supply a signing config (see `docs/ARCHITECTURE.md#release-signing`).
 
 ---
+
+## CI: build the APK on GitHub Actions
+
+`.github/workflows/android-ci.yml` runs three jobs:
+
+| Job | What it does | Artifact |
+| --- | --- | --- |
+| `test` | `:app:testDebugUnitTest` + `:app:lintDebug` | reports |
+| `build-debug` | `:app:assembleDebug` | `TorrentClawMovies-debug-apk` |
+| `build-release` | `:app:assembleRelease` (tags `v*` or manual dispatch) | `TorrentClawMovies-release-apk`, attached to the GitHub Release |
+
+The workflow is committed but **GitHub Actions must be enabled for the repo**
+(see below). Once enabled:
+
+```
+Repo → Actions tab → "I understand my workflows, go ahead and enable them"
+```
+
+Then either push to any branch (debug APK), or cut a tag for a release build:
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+Optional repository secrets:
+
+| Secret | Purpose |
+| --- | --- |
+| `TORRENTCLAW_API_KEY` | Baked into `BuildConfig` so CI builds use the 120 req/min tier |
+| `KEYSTORE_BASE64` | `base64 -w0 release.jks` — enables real release signing |
+| `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` | Keystore credentials |
+
+Without a keystore the release build falls back to the debug key, so the APK is
+still installable for testing.
 
 ## API integration notes
 

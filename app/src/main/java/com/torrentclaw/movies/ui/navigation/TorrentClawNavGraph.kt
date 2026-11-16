@@ -14,7 +14,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
@@ -39,6 +41,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.torrentclaw.movies.ui.detail.DetailScreen
+import com.torrentclaw.movies.ui.downloads.DownloadsScreen
 import com.torrentclaw.movies.ui.home.HomeScreen
 import com.torrentclaw.movies.ui.search.SearchScreen
 import com.torrentclaw.movies.ui.settings.SettingsScreen
@@ -132,6 +135,10 @@ fun TorrentClawNavGraph(
                 )
             }
 
+            composable<Destination.Downloads> {
+                DownloadsScreen()
+            }
+
             composable<Destination.Settings> {
                 SettingsScreen()
             }
@@ -197,6 +204,8 @@ private fun TopLevelDestination.icon(selected: Boolean): ImageVector = when (thi
     TopLevelDestination.SEARCH -> if (selected) Icons.Rounded.Search else Icons.Outlined.Search
     TopLevelDestination.WATCHLIST ->
         if (selected) Icons.Rounded.Bookmark else Icons.Outlined.BookmarkBorder
+    TopLevelDestination.DOWNLOADS ->
+        if (selected) Icons.Rounded.Download else Icons.Outlined.Download
 }
 
 private fun NavHostController.navigateToTab(destination: Destination) {

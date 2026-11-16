@@ -75,6 +75,25 @@ resource files:
 foreground layers, `app_icon_render.png` and `feature_graphic.png`; the rendered
 icon was visually inspected.
 
+## 6. Download layer (added after the first pass)
+
+The same offline compiler setup was extended with OkHttp/MediaStore/FileProvider
+stubs to type-check `data/download/*`, `data/local/DownloadEntity.kt`,
+`TorrentClawDatabase` (with the v1→v2 migration), `DetailViewModel` and
+`DownloadsViewModel`:
+
+```
+238 classes emitted, 0 errors
+```
+
+### Bugs this caught
+
+| Bug | Impact if shipped |
+| --- | --- |
+| `onProgress` typed `(DownloadProgress) -> Unit` while the manager calls a suspend DAO | **Hard compile error** — progress persistence could never compile |
+| `DownloadsViewModel` missing `import kotlinx.coroutines.flow.asStateFlow` | Hard compile error |
+| `@Suppress`-ed dead `BuildConfig.unused()` helper | Dead code / lint noise (removed) |
+
 ## What still needs a real Android build
 
 Anything that depends on Compose runtime behaviour or on the exact artifact
@@ -84,7 +103,8 @@ generation, and R8. These are pinned to known-good versions in
 that moved between BOM releases (no `PullToRefreshBox`, no
 `rememberRipple`, no `LineHeightStyle` constructor, no `strokeCap`).
 
-Run this on a machine with the Android SDK before release:
+Run these on a machine with the Android SDK (or on GitHub Actions, see README)
+before release:
 
 ```bash
 ./gradlew :app:assembleDebug
