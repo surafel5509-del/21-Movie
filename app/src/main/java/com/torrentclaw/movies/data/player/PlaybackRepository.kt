@@ -18,16 +18,17 @@ data class ResumeState(
     val watchedFraction: Float? = null,
 ) {
     /**
-     * A position is only worth restoring when there is a real gap to skip. Below
-     * this the intro is replayed anyway, which is what people expect.
+     * True when there is a meaningful amount left to watch.
+     *
+     * Deliberately keyed off [durationMs] rather than [watchedFraction]: the
+     * fraction is derived and can be absent (a position saved before the player
+     * knew the duration), and an earlier version treated "fraction unknown" as
+     * "must resume" — which short-circuited the end-of-film check and would have
+     * dropped a viewer back into the last two minutes on every re-open.
      */
-    /** True when there is a meaningful amount left to watch. */
     val shouldResume: Boolean
         get() = positionMs > MIN_RESUME_MS &&
-            (
-                watchedFraction == null ||
-                    positionMs < (durationMs - TAIL_TOLERANCE_MS)
-                )
+            (durationMs <= 0L || positionMs < durationMs - TAIL_TOLERANCE_MS)
 
     companion object {
         /** Below this the intro is replayed anyway, which is what people expect. */
