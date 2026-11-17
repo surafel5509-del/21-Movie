@@ -4,9 +4,30 @@ This is the part CI cannot do: the GitHub Actions runners have no Android device
 and this development sandbox has no emulator, so a real swarm transfer has to be
 confimed on hardware. Everything below is a concrete pass/fail check, in order.
 
-APK: [v1.2.0 release](https://github.com/surafel5509-del/21-Movie/releases/tag/v1.2.0)
-(`TorrentClawMovies-v1.2.0-release.apk`, ~21 MB, debug-signed so it installs
+APK: [v1.2.1 release](https://github.com/surafel5509-del/21-Movie/releases/tag/v1.2.1)
+(`TorrentClawMovies-v1.2.1-release.apk`, ~21 MB, debug-signed so it installs
 directly).
+
+## What v1.2.1 fixes
+
+v1.2.0 could show **"No torrents indexed yet"** on a movie the API answers with
+10+ releases (reported on *The Odyssey*, 2026). Nothing was missing upstream:
+the same query returns that film first, `hasTorrents: true`, 2,621 seeders.
+The fault was in this app, in two places:
+
+1. **The lookup was too narrow.** The detail screen resolves a movie by title,
+   because TorrentClaw has no `/movie/{id}` route. It asked for **5** results and
+   matched the content id inside that page only. "The Odyssey" matches 1022 titles
+   upstream, so the exact film could easily be outside those 5.
+2. **The failure was disguised as an answer.** When the lookup missed, the app
+   silently fell back to the Room cache — which stores poster, rating, year and
+   genres (so the page looked complete) but **no releases** — and rendered it as
+   a successful detail screen. That fallback row also hardcodes `hasTorrents = true`,
+   so every signal said "this movie has torrents" except the empty list.
+
+v1.2.1 asks for 50 rows (the API cap), pages up to three pages, matches the id on
+any page, and never returns a release-less detail as success: the screen now shows
+*why* it has no releases, with a **Retry** button.
 
 This build has a **PRO API key compiled in**, so downloads work on first launch
 without pasting anything. Settings → TorrentClaw account shows the tier the API
@@ -26,9 +47,13 @@ succeeded.
 | Install the APK | Installs on Android 8.0+ (minSdk 26) |
 | Launch | Home screen fills with movie posters, no crash |
 | Tap any movie | Detail screen shows a release list with quality, size, seeds |
+| Open **The Odyssey (2026)** | 4+ releases, first ~2,621 seeders, 2160p HDR — not "No torrents indexed yet" |
 
-**If the release list is empty, stop and read §2 first** — that is the API tier,
-not the app.
+**If the release list is empty, the card now tells you which case it is.** A
+*Retry* button means the lookup/request failed (network or rate limit, §2). No
+Retry button and "no indexed release" means the API genuinely has nothing for
+that title. Send a screenshot of the card text either way — the copy is specific
+on purpose.
 
 ## 2. Confirm the key is live (no action needed)
 

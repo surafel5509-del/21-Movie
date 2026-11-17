@@ -125,4 +125,26 @@ class DetailLookupTest {
         assertTrue(apiResult is ApiResult.Success)
         assertEquals(999, (apiResult as ApiResult.Success).data.movie.id)
     }
+
+    @Test
+    fun `two different films sharing a title are never silently substituted`() = runTest {
+        // "The Odyssey" is both a 2026 film and a 1954 one. If the requested id is
+        // missing and the title is ambiguous, showing the wrong film's magnets is
+        // worse than reporting a load failure.
+        coEvery {
+            api.getByContentUrl(any(), any(), any(), any(), any())
+        } returns ok(
+            result(11, "The Odyssey", 1954),
+            result(22, "The Odyssey", 2026),
+            total = 2,
+        )
+
+        val apiResult = repository(UnconfinedTestDispatcher())
+            .getMovieDetail(movieId = 73263, knownTitle = "The Odyssey")
+
+        assertTrue(
+            "an ambiguous title must not resolve to another film",
+            apiResult !is ApiResult.Success,
+        )
+    }
 }

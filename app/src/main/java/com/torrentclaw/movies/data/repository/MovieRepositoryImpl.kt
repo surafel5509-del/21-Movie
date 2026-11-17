@@ -237,11 +237,14 @@ class MovieRepositoryImpl @Inject constructor(
             if (seen.size >= body.total || pageResults.size < DETAIL_PAGE_SIZE) break
         }
 
-        return seen.firstOrNull { it.id == movieId }
-            ?: seen.firstOrNull {
-                it.title.equals(title, ignoreCase = true) && it.torrents.isNotEmpty()
-            }
-            ?: seen.firstOrNull { it.title.equals(title, ignoreCase = true) }
+        // No id match. Fall back to a title match only when it is unambiguous:
+        // "The Odyssey" is also a 1954 film, and showing its releases under the
+        // 2026 poster would be a worse bug than saying "could not load".
+        val sameTitle = seen.filter { it.title.equals(title, ignoreCase = true) }
+        if (sameTitle.map { it.id }.distinct().size == 1) {
+            return sameTitle.firstOrNull { it.torrents.isNotEmpty() } ?: sameTitle.firstOrNull()
+        }
+        return null
     }
 
     override suspend fun trackMagnet(infoHash: String, action: String) {
