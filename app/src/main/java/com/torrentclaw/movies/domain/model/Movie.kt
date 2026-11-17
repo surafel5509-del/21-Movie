@@ -169,12 +169,23 @@ data class TorrentRelease(
 
 enum class SwarmHealth { STRONG, FAIR, WEAK, DEAD }
 
+/** Why a detail payload has no releases, so the UI can say something useful. */
+enum class EmptyReleasesReason {
+    /** The API answered for this exact film and genuinely lists no torrents. */
+    NOT_INDEXED_YET,
+
+    /** Metadata resolved, but the API withheld hashes/magnets (no API key). */
+    NEEDS_API_KEY,
+}
+
 /** Detail payload: the movie plus every release TorrentClaw knows about. */
 data class MovieDetail(
     val movie: Movie,
     val releases: List<TorrentRelease>,
     val director: String? = null,
     val cast: List<CastMember> = emptyList(),
+    /** Set only when [releases] is empty and the cause is known. */
+    val emptyReason: EmptyReleasesReason? = null,
 )
 
 data class CastMember(

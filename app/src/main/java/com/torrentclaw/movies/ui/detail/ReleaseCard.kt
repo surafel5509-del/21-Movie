@@ -333,6 +333,9 @@ fun ReleaseCard(
 fun NoReleasesCard(
     modifier: Modifier = Modifier,
     needsApiKey: Boolean = false,
+    onRetry: (() -> Unit)? = null,
+    /** A specific reason the releases are missing; overrides the generic body. */
+    message: String? = null,
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -351,13 +354,21 @@ fun NoReleasesCard(
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = stringResource(
+                text = message ?: stringResource(
                     if (needsApiKey) R.string.detail_no_releases_api_hint else R.string.detail_no_torrents_body,
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
+            if (onRetry != null) {
+                Spacer(Modifier.height(12.dp))
+                // Without an action this screen is a dead end: the only way out
+                // used to be backing out and opening the movie again.
+                OutlinedButton(onClick = onRetry) {
+                    Text(stringResource(R.string.action_retry))
+                }
+            }
         }
     }
 }

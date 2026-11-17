@@ -408,6 +408,8 @@ private fun DetailContent(
             item {
                 NoReleasesCard(
                     needsApiKey = uiState.needsApiKey,
+                    message = uiState.releasesUnavailable,
+                    onRetry = viewModel::retry,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
             }

@@ -49,7 +49,13 @@ data class SearchResponseDto(
     @SerialName("parsedSeason") val parsedSeason: Int? = null,
     @SerialName("parsedEpisode") val parsedEpisode: Int? = null,
     @SerialName("fuzzyMatch") val fuzzyMatch: Boolean? = null,
-    val results: List<SearchResultDto> = emptyList(),
+    /**
+     * Nullable elements on purpose: one `null` inside the array would make
+     * kotlinx.serialization reject the *entire* response, and the app would fall
+     * back to cached metadata with zero releases — which is exactly what "No
+     * torrents indexed yet" looks like.
+     */
+    val results: List<SearchResultDto?> = emptyList(),
 )
 
 @Serializable
@@ -75,7 +81,11 @@ data class SearchResultDto(
     @SerialName("topInfoHash") val topInfoHash: String? = null,
     @SerialName("originCountry") val originCountry: List<String> = emptyList(),
     val rating: String? = null,
-    val torrents: List<TorrentDto> = emptyList(),
+    /**
+     * Nullable elements for the same reason as [SearchResponseDto.results]: one
+     * malformed element must not discard every other release.
+     */
+    val torrents: List<TorrentDto?> = emptyList(),
 ) {
     companion object {
         const val CONTENT_TYPE_MOVIE = "movie"

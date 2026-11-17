@@ -43,6 +43,12 @@ data class DetailUiState(
     val torrentErrors: Map<String, String> = emptyMap(),
     /** True when the API is withholding hashes because no key is configured. */
     val needsApiKey: Boolean = false,
+    /**
+     * Set when the movie loaded but has no releases. Distinguishes "the API has
+     * nothing indexed" from "we could not load the releases", because the two
+     * need different words and only one is fixable by retrying.
+     */
+    val releasesUnavailable: String? = null,
 ) {
     val movie: Movie?
         get() = detail?.movie
@@ -153,6 +159,7 @@ class DetailViewModel @Inject constructor(
                             title = result.data.movie.title.ifBlank { title },
                             errorMessage = null,
                             needsApiKey = needsApiKey && result.data.releases.any { !it.isDownloadable },
+                            releasesUnavailable = null,
                         )
                     }
                 }
@@ -160,7 +167,11 @@ class DetailViewModel @Inject constructor(
                     it.copy(
                         isLoading = false,
                         isRefreshing = false,
-                        errorMessage = result.message,
+                        // With the movie already on screen, an error belongs in the
+                        // release list as an explanation + retry, not as a blank
+                        // error page that loses the artwork the user just read.
+                        releasesUnavailable = if (it.detail != null) result.message else null,
+                        errorMessage = if (it.detail == null) result.message else null,
                     )
                 }
             }

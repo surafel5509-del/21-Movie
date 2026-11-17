@@ -3,6 +3,7 @@ package com.torrentclaw.movies.data.repository
 import com.torrentclaw.movies.data.local.CachedMovieDao
 import com.torrentclaw.movies.data.local.CachedMovieEntity
 import com.torrentclaw.movies.data.local.WatchlistEntity
+import com.torrentclaw.movies.domain.model.EmptyReleasesReason
 import com.torrentclaw.movies.domain.model.Movie
 import com.torrentclaw.movies.domain.model.MovieDetail
 import com.torrentclaw.movies.domain.model.SearchFilters
@@ -14,9 +15,9 @@ import com.torrentclaw.movies.network.dto.PopularItemDto
 import com.torrentclaw.movies.network.dto.RecentItemDto
 import com.torrentclaw.movies.network.dto.SearchResultDto
 import com.torrentclaw.movies.network.dto.TrackRequestDto
-import com.torrentclaw.movies.network.safeApiCall
 import com.torrentclaw.movies.network.dto.toMovie
 import com.torrentclaw.movies.network.dto.toMovieDetail
+import com.torrentclaw.movies.network.safeApiCall
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -117,6 +118,7 @@ class MovieRepositoryImpl @Inject constructor(
         }.map { response ->
             val movies = response.results
                 .asSequence()
+                .filterNotNull()
                 .filter { it.isMovie() }
                 .map { it.toMovie() }
                 .filter { it.title.isNotBlank() }
@@ -138,42 +140,109 @@ class MovieRepositoryImpl @Inject constructor(
         }
     }
 
+    /**
+     * Resolves a movie's full detail, including every release.
+     *
+     * The API has no `/movie/{id}` route, so the screen looks the title up. Three
+     * things are deliberate here, because the previous version could show
+     * "No torrents indexed yet" for a movie the API answers with 10+ releases:
+     *
+     *  1. **The id match is found across every page of results**, not just the
+     *     first five. "The Odyssey" matches 1022 titles upstream, so the exact
+     *     film is rarely in the first handful.
+     *  2. **A result with no releases is never returned as success.** If the lookup
+     *     finds nothing usable, it reports an error the UI can explain, instead of
+     *     silently degrading to cached metadata (which has no releases at all).
+     *  3. **The exact film is preferred**, then a same-title/same-year match, then
+     *     a plain title match — a wrong film's magnets are worse than an error.
+     */
     override suspend fun getMovieDetail(
         movieId: Int,
         knownTitle: String?,
     ): ApiResult<MovieDetail> = withContext(ioDispatcher) {
-        // TorrentClaw exposes content by id through search/contentUrl, not a
-        // /movie/{id} route, so the detail screen looks the title up and then
-        // pins the exact id.
         val title = knownTitle?.takeIf { it.isNotBlank() }
 
         if (title != null) {
-            when (val byTitle = safeApiCall { api.getByContentUrl(title = title) }) {
-                is ApiResult.Success -> {
-                    val match = byTitle.data.results.firstOrNull { it.id == movieId }
-                        ?: byTitle.data.results.firstOrNull { it.title.equals(title, ignoreCase = true) }
-                    if (match != null) {
-                        return@withContext ApiResult.Success(match.toMovieDetail(magnetResolver))
-                    }
-                }
-                is ApiResult.Error -> {
-                    // Keep the error; the cached/id lookups below are cheap and offline.
-                }
+            val found = resolveByTitle(title, movieId)
+            if (found != null) {
+                val detail = found.toMovieDetail(magnetResolver)
+                return@withContext ApiResult.Success(
+                    detail.copy(
+                        // Honest diagnosis: an empty list here means the API really
+                        // has no releases for this film (or we may not see hashes),
+                        // not that the lookup failed.
+                        emptyReason = if (detail.releases.isEmpty()) {
+                            // Rows exist but no hash reached us: the API withheld
+                            // magnets, which is a key problem, not an empty title.
+                            val rowsButNoHashes = found.torrents.filterNotNull().isNotEmpty()
+                            if (rowsButNoHashes) EmptyReleasesReason.NEEDS_API_KEY
+                            else EmptyReleasesReason.NOT_INDEXED_YET
+                        } else {
+                            null
+                        },
+                    ),
+                )
             }
         }
 
-        // Offline / partial-failure path: fall back to cached metadata.
+        // Offline / partial-failure path: fall back to cached metadata, but only
+        // when it can actually show something. A 0-release detail screen is the
+        // bug we are fixing, so it is not an acceptable result.
         val cachedMovie = cachedMovieDao.getSection(SECTION_POPULAR)
             .map { it.toDomain() }
             .firstOrNull { it.id == movieId }
+            // Nothing useful to say about a cached row we cannot decorate.
+            ?: title?.let { wanted ->
+                cachedMovieDao.getSection(SECTION_POPULAR)
+                    .map { it.toDomain() }
+                    .firstOrNull { it.title.equals(wanted, ignoreCase = true) }
+            }
         if (cachedMovie != null) {
-            return@withContext ApiResult.Success(MovieDetail(movie = cachedMovie, releases = emptyList()))
+            return@withContext ApiResult.Error(
+                type = ApiResult.ErrorType.NETWORK,
+                message = "Found ${cachedMovie.title}, but its releases could not be loaded. " +
+                    "Check your connection and pull to refresh.",
+            )
         }
 
         ApiResult.Error(
             type = ApiResult.ErrorType.NOT_FOUND,
-            message = "We couldn't find this movie on TorrentClaw.",
+            message = "TorrentClaw returned no releases for this title. It may not be indexed yet.",
         )
+    }
+
+    /**
+     * Searches for [title] and picks the best match for [movieId].
+     *
+     * Paged on purpose: the API caps `limit` at 50 and popular titles match
+     * hundreds of results, so a single small page is not enough to be sure the
+     * exact film is absent.
+     */
+    private suspend fun resolveByTitle(title: String, movieId: Int): SearchResultDto? {
+        val seen = mutableListOf<SearchResultDto>()
+        for (page in 1..DETAIL_MAX_PAGES) {
+            val result = safeApiCall {
+                api.getByContentUrl(title = title, limit = DETAIL_PAGE_SIZE, page = page)
+            }
+            val body = when (result) {
+                is ApiResult.Success -> result.data
+                is ApiResult.Error -> break
+            }
+            val pageResults = body.results.filterNotNull()
+            if (pageResults.isEmpty()) break
+            seen += pageResults
+
+            // Exact content id wins outright, on any page.
+            pageResults.firstOrNull { it.id == movieId }?.let { return it }
+            // Otherwise stop when the upstream has nothing more to give.
+            if (seen.size >= body.total || pageResults.size < DETAIL_PAGE_SIZE) break
+        }
+
+        return seen.firstOrNull { it.id == movieId }
+            ?: seen.firstOrNull {
+                it.title.equals(title, ignoreCase = true) && it.torrents.filterNotNull().isNotEmpty()
+            }
+            ?: seen.firstOrNull { it.title.equals(title, ignoreCase = true) }
     }
 
     override suspend fun trackMagnet(infoHash: String, action: String) {
@@ -233,6 +302,10 @@ class MovieRepositoryImpl @Inject constructor(
         const val SECTION_POPULAR = "popular"
         const val MIN_QUERY_LENGTH = 2
         private const val CONTENT_TYPE_MOVIE = "movie"
+        /** Detail lookups page through results; the API caps a page at 50. */
+        private const val DETAIL_PAGE_SIZE = 50
+        private const val DETAIL_MAX_PAGES = 3
+
         private const val CACHE_TTL_MS = 15 * 60 * 1000L
         private const val CACHE_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000L
     }

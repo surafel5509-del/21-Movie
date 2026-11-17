@@ -117,8 +117,8 @@
     <string name="detail_best_swarm">Best swarm</string>
     <string name="detail_score">%1$d/100</string>
     <string name="detail_no_torrents_title">No torrents indexed yet</string>
-    <string name="detail_no_torrents_body">TorrentClaw hasn\'t scraped a release for this title. It is still bookmarked for later.</string>
-    <string name="detail_magnet_disclaimer">Magnet links open your installed torrent client. TorrentClaw indexes public releases; the app never hosts files.</string>
+    <string name="detail_no_torrents_body">TorrentClaw has no indexed release for this title right now. Tap Retry in a moment, or open a different movie.</string>
+    <string name="detail_magnet_disclaimer">Downloads run inside this app (no other torrent app needed). TorrentClaw indexes public releases; the app never hosts files.</string>
     <string name="detail_open_magnet_malformed">That magnet link is malformed.</string>
     <string name="detail_directed_by">Directed by %1$s</string>
     <string name="detail_install_client_hint">Install a torrent client, then tap Open magnet again.</string>
@@ -199,6 +199,7 @@
     <string name="settings_api_clear">Remove</string>
     <string name="settings_api_get_key">Get a free key at torrentclaw.com</string>
     <string name="action_close">Close</string>
+    <string name="action_retry">Retry</string>
 
     <!-- Misc -->
     <string name="loading">Loading</string>

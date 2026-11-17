@@ -61,7 +61,9 @@ interface TorrentClawApi {
     suspend fun getByContentUrl(
         @Query("q") title: String,
         @Query("type") type: String = "movie",
-        @Query("limit") limit: Int = 5,
+        /** The API caps this at 50; paging is the caller's job. */
+        @Query("limit") limit: Int = 50,
+        @Query("page") page: Int = 1,
         @Query("locale") locale: String? = null,
     ): Response<SearchResponseDto>
 

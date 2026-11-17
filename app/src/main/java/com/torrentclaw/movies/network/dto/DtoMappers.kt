@@ -39,10 +39,10 @@ fun SearchResultDto.toMovie(): Movie = Movie(
     contentUrl = contentUrl,
     imdbId = imdbId,
     tmdbId = tmdbId.toTmdbId(),
-    maxSeeders = maxOf(maxSeeders, torrents.maxOfOrNull { it.seeders } ?: 0),
+    maxSeeders = maxOf(maxSeeders, torrents.filterNotNull().maxOfOrNull { it.seeders } ?: 0),
     bestQuality = bestQuality ?: bestQualityLabel(),
-    hasHdr = hasHdr == true || torrents.any { !it.hdrType.isNullOrBlank() },
-    hasTorrents = hasTorrents || torrents.isNotEmpty(),
+    hasHdr = hasHdr == true || torrents.filterNotNull().any { !it.hdrType.isNullOrBlank() },
+    hasTorrents = hasTorrents || torrents.filterNotNull().isNotEmpty(),
 )
 
 fun PopularItemDto.toMovie(): Movie = Movie(
@@ -133,6 +133,7 @@ fun TorrentDto.toRelease(magnetResolver: MagnetResolver, movieTitle: String): To
 /** Detail payload = movie metadata + de-duplicated releases sorted by swarm health. */
 fun SearchResultDto.toMovieDetail(magnetResolver: MagnetResolver): MovieDetail {
     val releases = torrents
+        .filterNotNull()
         .map { it.toRelease(magnetResolver, movieTitle = title) }
         // Dedupe on the info hash when present; otherwise on everything that
         // makes a release row distinct. Identical anonymous duplicates are noise
@@ -178,7 +179,7 @@ private fun String?.toHttpsImage(): String? {
 }
 
 private fun SearchResultDto.bestQualityLabel(): String? {
-    val best = torrents.mapNotNull { it.quality }.maxByOrNull { qualityRank(it) } ?: return null
+    val best = torrents.filterNotNull().mapNotNull { it.quality }.maxByOrNull { qualityRank(it) } ?: return null
     return if (qualityRank(best) >= qualityRank("2160p")) "4K" else best
 }
 
