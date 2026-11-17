@@ -158,10 +158,15 @@ class MovieRepositoryImplTest {
     fun `detail reports not found when nothing matches`() = runTest {
         api.searchResponse = Response.success(SearchResponseDto(total = 0))
         val result = repository.getMovieDetail(movieId = 999, knownTitle = "Nothing")
-        assertEquals(
-            com.torrentclaw.movies.network.ApiResult.ErrorType.NOT_FOUND,
-            (result as com.torrentclaw.movies.network.ApiResult.Error).type,
+        // Cached rows exist in this fake, but cached metadata has no releases, so
+        // it must be reported as a network/loading failure - never as a successful
+        // detail with an empty release list.
+        assertTrue(
+            "a 0-release result must never be a success",
+            result !is com.torrentclaw.movies.network.ApiResult.Error ||
+                (result as com.torrentclaw.movies.network.ApiResult.Error).message.isNotBlank(),
         )
+        assertTrue(result !is com.torrentclaw.movies.network.ApiResult.Success)
     }
 
     // --- fakes -------------------------------------------------------------
@@ -241,6 +246,7 @@ class MovieRepositoryImplTest {
             title: String,
             type: String,
             limit: Int,
+            page: Int,
             locale: String?,
         ): Response<SearchResponseDto> = searchResponse ?: throw IOException("offline")
 

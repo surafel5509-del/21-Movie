@@ -113,13 +113,13 @@ class RealPayloadDecodeTest {
         val response = json.decodeFromString<SearchResponseDto>(livePayload)
         assertEquals(1022, response.total)
         assertEquals(1, response.results.size)
-        assertEquals(4, response.results.first()!!.torrents.size)
+        assertEquals(4, response.results.first().torrents.size)
     }
 
     @Test
     fun `every live release survives mapping, so the detail screen cannot show 'no torrents'`() {
         val response = json.decodeFromString<SearchResponseDto>(livePayload)
-        val result = response.results.first()!!
+        val result = response.results.first()
         val detail = result.toMovieDetail(magnetResolver)
 
         assertEquals("The Odyssey", detail.movie.title)
@@ -142,7 +142,7 @@ class RealPayloadDecodeTest {
     fun `unknown nested fields are ignored rather than failing the response`() {
         // audioTracks/subtitleTracks/videoInfo/torrentFiles are not in the model.
         val response = json.decodeFromString<SearchResponseDto>(livePayload)
-        assertEquals(373, response.results.first()!!.torrents.first()!!.seeders)
+        assertEquals(373, response.results.first().torrents.first().seeders)
     }
 
     @Test
@@ -159,7 +159,7 @@ class RealPayloadDecodeTest {
                 "\"sizeBytes\": 8396661064, \"seeders\": 2621, \"leechers\": 791," +
                 "\"source\": \"yts\", \"languages\": [\"en\"]},{",
         )
-        val detail = json.decodeFromString<SearchResponseDto>(keyed).results.first()!!
+        val detail = json.decodeFromString<SearchResponseDto>(keyed).results.first()
             .toMovieDetail(magnetResolver)
 
         val downloadable = detail.releases.firstOrNull { it.isDownloadable }

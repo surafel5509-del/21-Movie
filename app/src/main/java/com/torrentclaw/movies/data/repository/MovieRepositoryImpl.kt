@@ -118,7 +118,6 @@ class MovieRepositoryImpl @Inject constructor(
         }.map { response ->
             val movies = response.results
                 .asSequence()
-                .filterNotNull()
                 .filter { it.isMovie() }
                 .map { it.toMovie() }
                 .filter { it.title.isNotBlank() }
@@ -174,7 +173,7 @@ class MovieRepositoryImpl @Inject constructor(
                         emptyReason = if (detail.releases.isEmpty()) {
                             // Rows exist but no hash reached us: the API withheld
                             // magnets, which is a key problem, not an empty title.
-                            val rowsButNoHashes = found.torrents.filterNotNull().isNotEmpty()
+                            val rowsButNoHashes = found.torrents.isNotEmpty()
                             if (rowsButNoHashes) EmptyReleasesReason.NEEDS_API_KEY
                             else EmptyReleasesReason.NOT_INDEXED_YET
                         } else {
@@ -228,7 +227,7 @@ class MovieRepositoryImpl @Inject constructor(
                 is ApiResult.Success -> result.data
                 is ApiResult.Error -> break
             }
-            val pageResults = body.results.filterNotNull()
+            val pageResults = body.results
             if (pageResults.isEmpty()) break
             seen += pageResults
 
@@ -240,7 +239,7 @@ class MovieRepositoryImpl @Inject constructor(
 
         return seen.firstOrNull { it.id == movieId }
             ?: seen.firstOrNull {
-                it.title.equals(title, ignoreCase = true) && it.torrents.filterNotNull().isNotEmpty()
+                it.title.equals(title, ignoreCase = true) && it.torrents.isNotEmpty()
             }
             ?: seen.firstOrNull { it.title.equals(title, ignoreCase = true) }
     }
