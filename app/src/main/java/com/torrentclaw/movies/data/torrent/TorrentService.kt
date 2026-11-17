@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import androidx.annotation.RequiresApi
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -63,16 +64,41 @@ class TorrentService : Service() {
         }
 
         startedAt = if (startedAt == 0L) System.currentTimeMillis() else startedAt
-        val notification = buildNotification(0, 0L, 0)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
-        }
+        enterForeground()
 
         engine.start(downloadDir())
         observeProgress()
         return START_STICKY
+    }
+
+    /**
+     * Enters the foreground, tolerating Android 15's dataSync budget.
+     *
+     * Android 15 allows a `dataSync` foreground service a total of **6 hours per
+     * day**. Once that is spent, `startForeground` throws
+     * `ForegroundServiceStartNotAllowedException` — and because this used to run
+     * before `engine.start()`, a 20 GB download started late in the day died
+     * instantly with no notification and no explanation.
+     *
+     * A failed promotion is not fatal: the session keeps running in the
+     * background while the app is alive, which is enough to start a download and
+     * let the user see why it is not progressing.
+     */
+    private fun enterForeground() {
+        val notification = buildNotification(0, 0L, 0)
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        }.onFailure { error ->
+            android.util.Log.w(TAG, "foreground promotion refused; continuing in background", error)
+        }
     }
 
     /** Mirrors engine progress into the notification until nothing is running. */
@@ -123,6 +149,19 @@ class TorrentService : Service() {
 
     private fun update(notification: Notification) {
         runCatching { NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, notification) }
+    }
+
+    /**
+     * Android 15 calls this when the dataSync budget runs out. The transfer is
+     * not cancelled: the engine keeps its session, and the next time the app is
+     * opened the service is promoted again.
+     */
+    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        android.util.Log.w(TAG, "foreground dataSync budget exhausted (startId=$startId)")
+        stopForeground(STOP_FOREGROUND_DETACH)
+        // Deliberately not stopSelf(): progress lives in the engine singleton, and
+        // the UI keeps reporting it; the service is promoted again next launch.
     }
 
     private fun buildNotification(
