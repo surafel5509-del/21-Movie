@@ -230,6 +230,7 @@ fun DetailScreen(
                     onDownloadTorrent = viewModel::onDownloadTorrent,
                     onDownloadMovie = viewModel::onDownloadMovie,
                     onCancelMovie = viewModel::onCancelMovieDownload,
+                    onRetry = viewModel::retry,
                 )
             }
         }
@@ -245,6 +246,7 @@ private fun DetailContent(
     onDownloadTorrent: (TorrentRelease) -> Unit,
     onDownloadMovie: (TorrentRelease) -> Unit,
     onCancelMovie: (TorrentRelease) -> Unit,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val movie = uiState.movie ?: return
@@ -409,7 +411,7 @@ private fun DetailContent(
                 NoReleasesCard(
                     needsApiKey = uiState.needsApiKey,
                     message = uiState.releasesUnavailable,
-                    onRetry = viewModel::retry,
+                    onRetry = onRetry,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
             }
