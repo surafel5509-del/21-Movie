@@ -41,7 +41,7 @@ and hand it to any client.
 
 | What | Where |
 | --- | --- |
-| **Signed-ish release APK** (recommended) | [Releases → v1.2.0](https://github.com/surafel5509-del/21-Movie/releases/latest) → `TorrentClawMovies-v1.2.0-release.apk` |
+| **Signed-ish release APK** (recommended) | [Releases → v1.2.1](https://github.com/surafel5509-del/21-Movie/releases/latest) → `TorrentClawMovies-v1.2.1-release.apk` |
 | **Debug APK** (latest commit) | [Actions](../../actions) → newest green *Android CI* run → artifact `TorrentClawMovies-debug-apk` |
 
 Requirements: Android 8.0 (API 26) or newer. Enable "Install unknown apps" for
